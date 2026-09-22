@@ -30,7 +30,7 @@ final class GPUEngine: LoadEngine, @unchecked Sendable {
         }
         self.device = device
         self.queue = queue
-        pipeline = try device.makeComputePipelineState(function: function)
+        pipeline = try await device.makeComputePipelineState(function: function)
         for _ in 0..<3 {
             guard let buffer = device.makeBuffer(length: count * MemoryLayout<Float>.stride, options: .storageModeShared) else {
                 throw LoadError("GPU 输出缓冲区分配失败")
