@@ -104,6 +104,19 @@ private final class FakeEngine: LoadEngine, @unchecked Sendable {
         XCTAssertEqual(controller.phase, .failed)
     }
 
+    func testCancellingSelfTestRestoresManualConfiguration() async throws {
+        let controller = SessionController(reportRoot: root()) { _ in [FakeEngine(.cpu)] }
+        controller.configuration.units = [.gpu]
+        controller.configuration.durationSeconds = 300
+        let original = controller.configuration
+        controller.startSelfTest()
+        try await waitFor { controller.phase == .running }
+        controller.stop()
+        try await waitFor { !controller.phase.busy }
+        XCTAssertEqual(controller.configuration, original)
+        XCTAssertNil(controller.suiteProgress)
+    }
+
     func testReportRoundTripAndCSVQuoting() throws {
         let output = root()
         let config = RunConfiguration()

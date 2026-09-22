@@ -20,6 +20,7 @@ import os
     @ObservationIgnored private var sequence: [RunConfiguration] = []
     @ObservationIgnored private var suiteIndex = 0
     @ObservationIgnored private var suiteTotal = 0
+    @ObservationIgnored private var savedManualConfiguration: RunConfiguration?
     @ObservationIgnored private var startedAt = 0.0
     @ObservationIgnored private var stopReason = "手动停止"
     @ObservationIgnored private var lastCPUSeconds = 0.0
@@ -123,6 +124,8 @@ import os
             } else {
                 sequence.removeAll()
                 suiteProgress = nil
+                if let savedManualConfiguration { configuration = savedManualConfiguration }
+                savedManualConfiguration = nil
             }
         }
     }
@@ -137,6 +140,7 @@ import os
 
     func startSelfTest() {
         guard !phase.busy else { return }
+        savedManualConfiguration = configuration
         sequence = RunConfiguration.selfTestSequence()
         suiteTotal = sequence.count
         configuration = sequence.removeFirst()
@@ -147,6 +151,7 @@ import os
 
     func startNPUComparison() {
         guard !phase.busy else { return }
+        savedManualConfiguration = configuration
         sequence = [1, 2, 4].map { count in
             var config = configuration
             config.units = [.npu]

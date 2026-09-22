@@ -1,7 +1,7 @@
 // Private API sequence and MIL blob layout adapted from maderix/ANE (MIT).
 // See THIRD_PARTY_NOTICES.md. These calls remain experimental on iOS.
 #import "PrivateANE.h"
-#import <IOSurface/IOSurface.h>
+#import <IOSurface/IOSurfaceRef.h>
 #import <objc/message.h>
 #import <dlfcn.h>
 #include <cmath>
@@ -190,4 +190,3 @@
 }
 - (void)dealloc { [self close]; }
 @end
-
