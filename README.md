@@ -59,7 +59,7 @@ xcodegen generate
 bash scripts/build.sh
 ```
 
-工作流锁定依赖、Action 提交与 XcodeGen 下载摘要，显式选择 iOS 27 SDK。先跑模拟器测试，再生成 arm64 Release IPA；包验证器拒绝模拟器二进制、缺失模型/Metal 内核及意外签名包。产物附带 dSYM、工具链/Git 信息和模拟器界面截图。版本 `0.1.0` 表示开发构建，build 号取 Actions run number。
+工作流锁定依赖、Action 提交与 XcodeGen 下载摘要，显式选择 iOS 27 SDK。先编译设备版，再跑模拟器测试，全部通过后上传 arm64 Release IPA；包验证器拒绝模拟器二进制、缺失模型/Metal 内核及意外签名包。产物附带 dSYM、工具链/Git 信息和模拟器界面截图。仅修改 README/验证文档不重新构建。版本 `0.1.0` 表示开发构建，build 号取 Actions run number。
 
 测试：Xcode 的 `Furnace` scheme 包含会话生命周期、七种选择组合、错误回收、报告、原生 CPU 校验和模拟器 NPU 不可用测试。模拟器与云端 macOS 结果不能证明目标 iPhone 的 GPU/ANE 性能。
 

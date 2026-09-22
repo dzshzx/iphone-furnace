@@ -10,6 +10,10 @@
 @implementation FurnaceANE {
     id _model;
     id _request;
+    id _descriptor;
+    NSData *_milData;
+    NSData *_weightData;
+    NSArray *_surfaceWrappers;
     IOSurfaceRef _input;
     IOSurfaceRef _output;
     NSString *_directory;
@@ -98,6 +102,9 @@
         NSData *milData = [mil dataUsingEncoding:NSUTF8StringEncoding];
         id descriptor = ((id(*)(id,SEL,id,id,id))objc_msgSend)(descriptorClass, descriptorSEL, milData,
             @{@"@model_path/weights/weight.bin": @{@"offset": @0, @"data": weights}}, nil);
+        // Retain every input for the entire experiment; ownership across an
+        // undocumented ABI must not depend on the local autorelease pool.
+        _descriptor = descriptor; _milData = milData; _weightData = weights;
         _model = descriptor ? ((id(*)(id,SEL,id))objc_msgSend)(modelClass, modelSEL, descriptor) : nil;
         for (NSString *method in @[@"hexStringIdentifier", @"compileWithQoS:options:error:", @"loadWithQoS:options:error:",
                                    @"evaluateWithQoS:options:request:error:", @"unloadWithQoS:error:"]) {
@@ -134,6 +141,7 @@
         id inputWrapper = ((id(*)(id,SEL,IOSurfaceRef))objc_msgSend)(surfaceClass, surfaceSEL, _input);
         id outputWrapper = ((id(*)(id,SEL,IOSurfaceRef))objc_msgSend)(surfaceClass, surfaceSEL, _output);
         if (!inputWrapper || !outputWrapper) return [self fail:@"IOSurface 包装失败" underlying:nil output:error];
+        _surfaceWrappers = @[inputWrapper, outputWrapper];
         _request = ((id(*)(id,SEL,id,id,id,id,id,id,id))objc_msgSend)(requestClass, requestSEL,
             @[inputWrapper], @[@0], @[outputWrapper], @[@0], nil, nil, @0);
         if (!_request) return [self fail:@"请求创建失败" underlying:nil output:error];
@@ -184,6 +192,7 @@
     } @catch (NSException *exception) { /* Already stopping. Resources below still need releasing. */ }
     _loaded = NO;
     _request = nil; _model = nil;
+    _descriptor = nil; _milData = nil; _weightData = nil; _surfaceWrappers = nil;
     if (_input) { CFRelease(_input); _input = nullptr; }
     if (_output) { CFRelease(_output); _output = nullptr; }
     if (_directory) { [NSFileManager.defaultManager removeItemAtPath:_directory error:nil]; _directory = nil; }

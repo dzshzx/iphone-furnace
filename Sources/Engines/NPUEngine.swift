@@ -59,7 +59,7 @@ final class NPUEngine: LoadEngine, @unchecked Sendable {
         let convolutions = main.block.operations.filter { $0.operatorName == "conv" }
         var aneCount = 0
         for operation in convolutions {
-            if let usage = plan.deviceUsage(for: operation), case .neuralEngine = usage.preferredComputeDevice {
+            if let usage = plan.deviceUsage(for: operation), case .neuralEngine = usage.preferred {
                 aneCount += 1
             }
         }
@@ -124,4 +124,3 @@ final class NPUEngine: LoadEngine, @unchecked Sendable {
     }
     func sample() -> EngineSnapshot { state.withValue { $0.sample } }
 }
-
