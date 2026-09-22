@@ -1,0 +1,13 @@
+.DS_Store
+.build/
+build/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+.venv/
+__pycache__/
+.pytest_cache/
+Models/*.mlpackage/
+Models/manifest.json
+dist/
+

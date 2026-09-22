@@ -1,0 +1,9 @@
+[project]
+name = "furnace-build-tools"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = ["coremltools==9.0", "numpy==2.2.6"]
+
+[dependency-groups]
+dev = ["pytest==8.4.2", "pyyaml==6.0.2"]
+

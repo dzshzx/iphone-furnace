@@ -1,0 +1,72 @@
+name: iOS build
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: xcode-27
+    timeout-minutes: 35
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff
+        with:
+          version: '0.8.22'
+          enable-cache: true
+      - name: Verify toolchain
+        run: |
+          xcodebuild -version
+          test "$(xcrun --sdk iphoneos --show-sdk-version)" = "27.0"
+          curl -fL --retry 3 https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip -o "$RUNNER_TEMP/xcodegen.zip"
+          echo "4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP/xcodegen"
+          echo "$RUNNER_TEMP/xcodegen/xcodegen/bin" >> "$GITHUB_PATH"
+      - name: Generate models and project
+        run: |
+          uv sync --frozen
+          uv run python scripts/generate_models.py
+          uv run python scripts/generate_icon.py
+          xcodegen generate
+      - name: Simulator lifecycle tests
+        run: |
+          mkdir -p build
+          xcodebuild -project Furnace.xcodeproj -scheme Furnace -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.0' \
+            -derivedDataPath build/simulator -resultBundlePath build/tests.xcresult \
+            CODE_SIGNING_ALLOWED=NO test >build/simulator-test.log 2>&1 || {
+              tail -n 140 build/simulator-test.log
+              exit 1
+            }
+      - name: Build unsigned IPA
+        run: bash scripts/build.sh
+      - name: Capture simulator UI
+        run: |
+          xcrun simctl launch booted com.dzshzx.furnace
+          sleep 2
+          xcrun simctl io booted screenshot dist/simulator-dashboard.png
+      - name: Upload IPA and build receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Furnace-unsigned-${{ github.run_number }}
+          path: dist/
+          retention-days: 14
+          if-no-files-found: error
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: build-diagnostics-${{ github.run_number }}
+          path: |
+            build/*.log
+            build/tests.xcresult
+            Models/manifest.json
+          retention-days: 7
+
