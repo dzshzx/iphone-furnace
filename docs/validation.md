@@ -2,11 +2,23 @@
 
 目标：iPhone 18 Pro Max，iOS 27 正式版，普通开发者签名，前台运行。
 
+2026-09-23（北京时间）完成开发构建 `0.1.0 (7)` 的云端验证与下载读回。
+源码提交：`27801c8741425242c8a35503f4c5b71a3878730f`。
+
+- [完整成功运行](https://github.com/dzshzx/iphone-furnace/actions/runs/35751103761)
+- [未签名 IPA、dSYM、构建信息和界面截图](https://github.com/dzshzx/iphone-furnace/actions/runs/35751103761/artifacts/10706251027)
+- [测试与编译诊断](https://github.com/dzshzx/iphone-furnace/actions/runs/35751103761/artifacts/10706265990)
+
+实际工具链为 Xcode 27.0 / build 27A266a、iOS SDK 27.0、macOS 27.0 / 26A428。
+构建机上的模拟器计算使用宿主硬件，不作为目标 iPhone 的性能证据。
+
 | 验证项 | 状态 | 证据 |
 |---|---|---|
 | 三档模型生成 | 已通过 | 本地 coremltools 9.0，256/384/512 通道模型完成转换 |
-| 模拟器测试 | 待云端执行 | GitHub Actions iOS build |
-| arm64 未签名 IPA | 待云端执行 | GitHub Actions iOS build |
+| Python 构建测试 | 已通过 | 4 项；模型图保留动态输入与卷积层，验证器拒绝模拟器/缺失资源/签名包 |
+| 模拟器测试 | 已通过 | 12 项、0 失败、0 跳过；包括真实 CPU、三种 Metal 负载、Core ML CPU 数值校验及生命周期 |
+| arm64 未签名 IPA | 已通过 | 云端生成后重新下载检查：Mach-O iOS 平台、arm64、最低 iOS 27.0、全部模型及 Metal 内核完整，无签名目录和描述文件 |
+| 界面截图 | 已读回 | iPhone 18 Pro Max 模拟器；负载选择、读数与底部开始按钮显示正常 |
 | 真机签名安装 | 待用户设备验证 | 当前环境没有已连接 iPhone |
 | 真机持续负载与停止响应 | 待验证 | 手机完整自测报告 |
 | ANE 实际执行 | 待验证 | Core ML 计算计划只表示预计分配；需要真机轨迹 |
@@ -17,3 +29,5 @@
 
 私有后端单独测试。API 不可用是能力探测结果，不能记为 NPU 已验证；若应用退出，导出中断会话并记录下次启动显示的阶段。
 
+下载包的 bundle ID 为 `com.dzshzx.furnace`，设备类型为 iPhone，方向为竖屏。
+开发构建尚未经过目标手机的签名安装、功耗或 ANE 实际执行测量。
