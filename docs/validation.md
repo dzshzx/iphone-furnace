@@ -1,5 +1,10 @@
 # 验证记录
 
+2026-09-23：构建 `0.1.0 (8)` 的安装产物已改为 `.ipa` 单文件直传。
+[直接下载 Furnace-unsigned.ipa](https://github.com/dzshzx/iphone-furnace/actions/runs/35753630279/artifacts/10706688432)。
+[本次工作流](https://github.com/dzshzx/iphone-furnace/actions/runs/35753630279)成功；已从 GitHub 下载该文件，通过 IPA 结构、arm64、iOS 平台及模型/Metal 资源检查。
+符号、构建信息和截图保存在单独的 `build-diagnostics-8` 产物中。
+
 目标：iPhone 18 Pro Max，iOS 27 正式版，普通开发者签名，前台运行。
 
 2026-09-23（北京时间）完成开发构建 `0.1.0 (7)` 的云端验证与下载读回。
