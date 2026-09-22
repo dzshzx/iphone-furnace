@@ -24,6 +24,11 @@ jobs:
         with:
           version: '0.8.22'
           enable-cache: true
+      - name: Start fixed simulator
+        run: |
+          read -r simulator_id simulator_state < <(xcrun simctl list devices available --json | python3 -c 'import json,sys; print(next((d["udid"] + " " + d["state"]) for runtime,devices in json.load(sys.stdin)["devices"].items() if runtime.endswith("iOS-27-0") for d in devices if d["name"] == "iPhone 18 Pro Max"))')
+          echo "FURNACE_SIMULATOR_ID=$simulator_id" >> "$GITHUB_ENV"
+          if [ "$simulator_state" != "Booted" ]; then xcrun simctl boot "$simulator_id"; fi
       - name: Verify toolchain
         run: |
           xcodebuild -version
@@ -41,12 +46,14 @@ jobs:
           uv run pytest scripts/tests
           xcodegen generate
       - name: Build unsigned IPA
+        id: device-build
         run: bash scripts/build.sh
       - name: Simulator lifecycle tests
+        id: simulator-tests
         run: |
           mkdir -p build
           xcodebuild -project Furnace.xcodeproj -scheme Furnace -configuration Debug \
-            -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.0' \
+            -destination "platform=iOS Simulator,id=$FURNACE_SIMULATOR_ID" -parallel-testing-enabled NO \
             -derivedDataPath build/simulator -resultBundlePath build/tests.xcresult \
             CODE_SIGNING_ALLOWED=NO test >build/simulator-test.log 2>&1 || {
               tail -n 140 build/simulator-test.log
@@ -54,12 +61,13 @@ jobs:
             }
       - name: Capture simulator UI
         run: |
-          simulator_id=$(xcrun simctl list devices booted --json | python3 -c 'import json,sys; print(next(d["udid"] for devices in json.load(sys.stdin)["devices"].values() for d in devices if d["state"] == "Booted" and "iPhone 18 Pro Max" in d["name"]))')
-          xcrun simctl install "$simulator_id" build/simulator/Build/Products/Debug-iphonesimulator/Furnace.app
-          xcrun simctl launch "$simulator_id" com.dzshzx.furnace
+          xcrun simctl bootstatus "$FURNACE_SIMULATOR_ID" -b
+          xcrun simctl install "$FURNACE_SIMULATOR_ID" build/simulator/Build/Products/Debug-iphonesimulator/Furnace.app
+          xcrun simctl launch "$FURNACE_SIMULATOR_ID" com.dzshzx.furnace
           sleep 2
-          xcrun simctl io "$simulator_id" screenshot dist/simulator-dashboard.png
+          xcrun simctl io "$FURNACE_SIMULATOR_ID" screenshot dist/simulator-dashboard.png
       - name: Upload IPA and build receipt
+        if: always() && steps.device-build.outcome == 'success' && steps.simulator-tests.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: Furnace-unsigned-${{ github.run_number }}
