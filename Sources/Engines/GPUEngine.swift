@@ -8,6 +8,7 @@ final class GPUEngine: LoadEngine, @unchecked Sendable {
     private let state = Locked((stop: true, sample: EngineSnapshot(unit: .gpu), iterations: UInt32(128)))
     private let group = DispatchGroup()
     private let slotsAvailable = DispatchSemaphore(value: 3)
+    private let freeSlots = Locked([0, 1, 2])
     private var device: MTLDevice!
     private var queue: MTLCommandQueue!
     private var pipeline: MTLComputePipelineState!
@@ -75,13 +76,11 @@ final class GPUEngine: LoadEngine, @unchecked Sendable {
         group.enter()
         DispatchQueue.global(qos: .userInitiated).async { [self] in
             defer { group.leave() }
-            var index = 0
             var serial: UInt32 = 0
             while !state.withValue({ $0.stop }) {
                 guard slotsAvailable.wait(timeout: .now() + 0.1) == .success else { continue }
                 if state.withValue({ $0.stop }) { slotsAvailable.signal(); break }
-                let slot = index % 3
-                index += 1
+                let slot = freeSlots.withValue { $0.removeLast() }
                 serial &+= 1
                 autoreleasepool { submit(slot: slot, serial: serial) }
             }
@@ -90,7 +89,7 @@ final class GPUEngine: LoadEngine, @unchecked Sendable {
 
     private func submit(slot: Int, serial: UInt32) {
         guard let command = queue.makeCommandBuffer() else {
-            fail("无法创建 GPU 命令缓冲区"); slotsAvailable.signal(); return
+            fail("无法创建 GPU 命令缓冲区"); release(slot); return
         }
         command.label = "Furnace batch \(serial)"
         let matrixPass = workload == .matrix || (workload == .mixed && serial % 3 == 0)
@@ -98,7 +97,7 @@ final class GPUEngine: LoadEngine, @unchecked Sendable {
             multiplication.encode(commandBuffer: command, leftMatrix: left, rightMatrix: right, resultMatrix: matrices[slot])
         } else {
             guard let encoder = command.makeComputeCommandEncoder() else {
-                fail("无法创建 GPU 计算编码器"); slotsAvailable.signal(); return
+                fail("无法创建 GPU 计算编码器"); release(slot); return
             }
             var iterations = state.withValue { $0.iterations }
             var seed = serial
@@ -116,7 +115,7 @@ final class GPUEngine: LoadEngine, @unchecked Sendable {
         }
         group.enter()
         command.addCompletedHandler { [self] buffer in
-            defer { slotsAvailable.signal(); group.leave() }
+            defer { release(slot); group.leave() }
             guard buffer.status == .completed else {
                 fail(buffer.error?.localizedDescription ?? "GPU 执行失败"); return
             }
@@ -146,6 +145,10 @@ final class GPUEngine: LoadEngine, @unchecked Sendable {
     private func fail(_ message: String) {
         state.withValue { $0.sample.error = message; $0.stop = true }
     }
+    private func release(_ slot: Int) {
+        freeSlots.withValue { $0.append(slot) }
+        slotsAvailable.signal()
+    }
     func stop() async {
         state.withValue { $0.stop = true }
         await withCheckedContinuation { continuation in
@@ -154,4 +157,3 @@ final class GPUEngine: LoadEngine, @unchecked Sendable {
     }
     func sample() -> EngineSnapshot { state.withValue { $0.sample } }
 }
-

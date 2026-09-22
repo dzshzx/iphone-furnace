@@ -85,10 +85,11 @@ struct RunSummary: Codable {
     func finish(phase: SessionPhase, reason: String, elapsed: Double, engines: [EngineSnapshot]) throws {
         let summary = RunSummary(finishedAt: Date(), phase: phase, reason: reason, elapsed: elapsed,
                                  engines: engines, droppedSamples: droppedSamples)
-        try encoder.encode(summary).write(to: directory.appendingPathComponent("summary.json"), options: .atomic)
         try jsonFile?.synchronize(); try csvFile?.synchronize()
         try jsonFile?.close(); try csvFile?.close()
         jsonFile = nil; csvFile = nil
+        // Write the completion receipt only after all samples have flushed.
+        try encoder.encode(summary).write(to: directory.appendingPathComponent("summary.json"), options: .atomic)
     }
 
     static func csvField(_ value: String) -> String {
@@ -106,4 +107,3 @@ struct RunSummary: Codable {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 }
-

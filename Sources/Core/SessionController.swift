@@ -19,6 +19,7 @@ import os
     @ObservationIgnored private var report: ReportStore?
     @ObservationIgnored private var sequence: [RunConfiguration] = []
     @ObservationIgnored private var suiteIndex = 0
+    @ObservationIgnored private var suiteTotal = 0
     @ObservationIgnored private var startedAt = 0.0
     @ObservationIgnored private var stopReason = "手动停止"
     @ObservationIgnored private var lastCPUSeconds = 0.0
@@ -117,7 +118,7 @@ import os
             if failure == nil && stopReason == "定时结束" && !sequence.isEmpty {
                 suiteIndex += 1
                 configuration = sequence.removeFirst()
-                suiteProgress = "自测 \(suiteIndex)/8"
+                suiteProgress = "自测 \(suiteIndex)/\(suiteTotal)"
                 start()
             } else {
                 sequence.removeAll()
@@ -137,9 +138,27 @@ import os
     func startSelfTest() {
         guard !phase.busy else { return }
         sequence = RunConfiguration.selfTestSequence()
+        suiteTotal = sequence.count
         configuration = sequence.removeFirst()
         suiteIndex = 1
         suiteProgress = "自测 1/8"
+        start()
+    }
+
+    func startNPUComparison() {
+        guard !phase.busy else { return }
+        sequence = [1, 2, 4].map { count in
+            var config = configuration
+            config.units = [.npu]
+            config.npuBackend = .coreML
+            config.npuConcurrency = count
+            config.durationSeconds = 30
+            return config
+        }
+        suiteTotal = sequence.count
+        suiteIndex = 1
+        suiteProgress = "自测 1/3"
+        configuration = sequence.removeFirst()
         start()
     }
 
@@ -171,4 +190,3 @@ import os
         }
     }
 }
-

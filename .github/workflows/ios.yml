@@ -25,6 +25,7 @@ jobs:
         run: |
           xcodebuild -version
           test "$(xcrun --sdk iphoneos --show-sdk-version)" = "27.0"
+          xcodebuild -downloadComponent MetalToolchain
           curl -fL --retry 3 https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip -o "$RUNNER_TEMP/xcodegen.zip"
           echo "4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
           unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP/xcodegen"
@@ -34,6 +35,7 @@ jobs:
           uv sync --frozen
           uv run python scripts/generate_models.py
           uv run python scripts/generate_icon.py
+          uv run pytest scripts/tests
           xcodegen generate
       - name: Simulator lifecycle tests
         run: |
@@ -69,4 +71,3 @@ jobs:
             build/tests.xcresult
             Models/manifest.json
           retention-days: 7
-

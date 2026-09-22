@@ -36,6 +36,10 @@ struct Dashboard: View {
                     }.font(.subheadline.weight(.semibold))
                     Text("完整自测约 22 分钟：七种组合各 1 分钟，三路联合 15 分钟。模型准备时间另计。")
                         .font(.caption).foregroundStyle(.secondary)
+                    Button("比较 NPU 1 / 2 / 4 路并发") { session.startNPUComparison() }
+                        .font(.subheadline.weight(.semibold)).disabled(session.phase.busy)
+                    Text("使用当前通道数，每档运行 30 秒并保存独立报告。比较吞吐量，不将最快档位称为最高功耗。")
+                        .font(.caption).foregroundStyle(.secondary)
                 }.padding(22)
             }
             .background(InstrumentStyle.background)
@@ -168,7 +172,10 @@ struct Dashboard: View {
                 Text("5 分钟").tag(300)
                 Text("15 分钟").tag(900)
                 Text("30 分钟").tag(1800)
-                if session.suiteProgress != nil { Text("自测 1 分钟").tag(60) }
+                if session.suiteProgress != nil {
+                    Text("自测 1 分钟").tag(60)
+                    Text("并发比较 30 秒").tag(30)
+                }
             }
         }.font(.subheadline).disabled(session.phase.busy)
     }
@@ -236,4 +243,3 @@ private struct ReportsView: View {
         }
     }
 }
-

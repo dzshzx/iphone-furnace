@@ -1,4 +1,6 @@
 import XCTest
+import Metal
+@preconcurrency import CoreML
 @testable import Furnace
 
 private final class FakeEngine: LoadEngine, @unchecked Sendable {
@@ -137,5 +139,42 @@ private final class FakeEngine: LoadEngine, @unchecked Sendable {
         await engine.stop()
         #endif
     }
-}
 
+    func testGPUWorkloadsCompleteAndDrainOnSimulatorHost() async throws {
+        guard MTLCreateSystemDefaultDevice() != nil else { throw XCTSkip("Host has no Metal device") }
+        for workload in GPUWorkload.allCases {
+            let engine = GPUEngine(workload: workload)
+            try await engine.prepare()
+            engine.start()
+            try await Task.sleep(for: .milliseconds(250))
+            await engine.stop()
+            XCTAssertNil(engine.sample().error, workload.rawValue)
+            XCTAssertGreaterThan(engine.sample().completed, 0, workload.rawValue)
+            let count = engine.sample().completed
+            try await Task.sleep(for: .milliseconds(30))
+            XCTAssertEqual(engine.sample().completed, count)
+        }
+    }
+
+    func testBundledModelProducesFiniteInputDependentOutputOnCPU() async throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "Stress256", withExtension: "mlmodelc"))
+        let results = try await Task.detached {
+            let config = MLModelConfiguration()
+            config.computeUnits = .cpuOnly
+            let model = try MLModel(contentsOf: url, configuration: config)
+            var results: [Double] = []
+            for value in [Float16(0.25), Float16(0.5)] {
+                let array = try MLMultiArray(shape: [1, 256, 64, 64], dataType: .float16)
+                let buffer = array.dataPointer.bindMemory(to: UInt16.self, capacity: array.count)
+                for i in 0..<array.count { buffer[i] = value.bitPattern }
+                let input = try MLDictionaryFeatureProvider(dictionary: ["x": MLFeatureValue(multiArray: array)])
+                let output = try model.prediction(from: input)
+                guard let data = output.featureValue(for: "result")?.multiArrayValue else { throw LoadError("output missing") }
+                results.append(data[0].doubleValue)
+            }
+            return results
+        }.value
+        XCTAssertTrue(results.allSatisfy { $0.isFinite && $0 > 0 })
+        XCTAssertEqual(results[1] / results[0], 2, accuracy: 0.03)
+    }
+}
