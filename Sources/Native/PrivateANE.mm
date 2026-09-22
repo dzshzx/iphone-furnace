@@ -4,6 +4,7 @@
 #import <IOSurface/IOSurfaceRef.h>
 #import <objc/message.h>
 #import <dlfcn.h>
+#import <mach/kern_return.h>
 #include <cmath>
 
 @implementation FurnaceANE {
@@ -148,7 +149,7 @@
 - (BOOL)evaluateWithInput:(float)value error:(NSError **)error {
     @try {
         if (!_loaded || !_request) return [self fail:@"尚未加载" underlying:nil output:error];
-        if (IOSurfaceLock(_input, 0, nullptr) != kIOReturnSuccess)
+        if (IOSurfaceLock(_input, 0, nullptr) != KERN_SUCCESS)
             return [self fail:@"输入锁定失败" underlying:nil output:error];
         _Float16 *input = static_cast<_Float16 *>(IOSurfaceGetBaseAddress(_input));
         for (NSInteger i = 0; i < _channels * 4096; ++i) input[i] = (_Float16)value;
@@ -157,7 +158,7 @@
         BOOL ok = ((BOOL(*)(id,SEL,unsigned int,id,id,NSError**))objc_msgSend)(_model,
             NSSelectorFromString(@"evaluateWithQoS:options:request:error:"), 0, @{}, _request, &underlying);
         if (!ok) return [self fail:@"执行失败" underlying:underlying output:error];
-        if (IOSurfaceLock(_output, kIOSurfaceLockReadOnly, nullptr) != kIOReturnSuccess)
+        if (IOSurfaceLock(_output, kIOSurfaceLockReadOnly, nullptr) != KERN_SUCCESS)
             return [self fail:@"输出锁定失败" underlying:nil output:error];
         const _Float16 *output = static_cast<const _Float16 *>(IOSurfaceGetBaseAddress(_output));
         BOOL valid = YES;

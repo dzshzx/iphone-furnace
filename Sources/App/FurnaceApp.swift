@@ -6,6 +6,7 @@ import SwiftUI
     var body: some Scene {
         WindowGroup {
             Dashboard(session: session)
+                .preferredColorScheme(.light)
                 .onChange(of: scenePhase) { _, value in
                     if value == .background { session.stop(reason: "应用进入后台或锁屏") }
                 }
@@ -15,4 +16,3 @@ import SwiftUI
         }
     }
 }
-
