@@ -66,12 +66,12 @@ jobs:
           xcrun simctl launch "$FURNACE_SIMULATOR_ID" com.dzshzx.furnace
           sleep 2
           xcrun simctl io "$FURNACE_SIMULATOR_ID" screenshot dist/simulator-dashboard.png
-      - name: Upload IPA and build receipt
+      - name: Upload IPA directly
         if: always() && steps.device-build.outcome == 'success' && steps.simulator-tests.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: Furnace-unsigned-${{ github.run_number }}
-          path: dist/
+          path: dist/Furnace-unsigned.ipa
+          archive: false
           retention-days: 14
           if-no-files-found: error
       - name: Upload diagnostics
@@ -83,4 +83,7 @@ jobs:
             build/*.log
             build/tests.xcresult
             Models/manifest.json
+            dist/Furnace.dSYM.zip
+            dist/build-info.txt
+            dist/simulator-dashboard.png
           retention-days: 7

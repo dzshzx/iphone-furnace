@@ -5,7 +5,7 @@
 ## 下载与安装
 
 1. 打开 [iOS build](https://github.com/dzshzx/iphone-furnace/actions/workflows/ios.yml)，选择最新成功运行。
-2. 下载 `Furnace-unsigned-<编号>` artifact，解压得到 `Furnace-unsigned.ipa`。
+2. 下载产物 `Furnace-unsigned.ipa`，直接交给签名工具；符号、构建信息和截图保存在单独的 `build-diagnostics-<编号>` 产物中。
 3. 使用自己的签名工具、开发者证书和包含设备的描述文件重新签名并安装。IPA 本身未签名，不能直接点击安装；无需向本仓库或 GitHub 提供 Apple 账号。
 4. 如系统要求，在“设置 → 隐私与安全性 → 开发者模式”开启开发者模式。首次启动使用 Core ML 后端。
 
