@@ -2,6 +2,7 @@
 // See THIRD_PARTY_NOTICES.md. These calls remain experimental on iOS.
 #import "PrivateANE.h"
 #include "ANEModelData.h"
+#include "ANEModelCalls.h"
 #import <IOSurface/IOSurfaceRef.h>
 #import <objc/message.h>
 #import <dlfcn.h>
@@ -131,10 +132,10 @@
     @try {
         NSError *underlying = nil;
         [self setProbeStage:@"编译"];
-        if (!((BOOL(*)(id,SEL,unsigned int,id,NSError**))objc_msgSend)(_model, NSSelectorFromString(@"compileWithQoS:options:error:"), 0, @{}, &underlying))
+        if (!furnace::ane::compileModel(_model, &underlying))
             return [self fail:@"编译被拒绝或失败" underlying:underlying output:error];
         [self setProbeStage:@"加载"];
-        if (!((BOOL(*)(id,SEL,unsigned int,id,NSError**))objc_msgSend)(_model, NSSelectorFromString(@"loadWithQoS:options:error:"), 0, @{}, &underlying))
+        if (!furnace::ane::loadModel(_model, &underlying))
             return [self fail:@"加载被拒绝或失败" underlying:underlying output:error];
         _loaded = YES;
         NSDictionary *surfaceProperties = @{
@@ -174,8 +175,7 @@
         for (NSInteger i = 0; i < _channels * 4096; ++i) input[i] = (_Float16)value;
         IOSurfaceUnlock(_input, 0, nullptr);
         NSError *underlying = nil;
-        BOOL ok = ((BOOL(*)(id,SEL,unsigned int,id,id,NSError**))objc_msgSend)(_model,
-            NSSelectorFromString(@"evaluateWithQoS:options:request:error:"), 0, @{}, _request, &underlying);
+        BOOL ok = furnace::ane::evaluateModel(_model, _request, &underlying);
         if (!ok) return [self fail:@"执行失败" underlying:underlying output:error];
         if (IOSurfaceLock(_output, kIOSurfaceLockReadOnly, nullptr) != KERN_SUCCESS)
             return [self fail:@"输出锁定失败" underlying:nil output:error];
@@ -198,7 +198,7 @@
         if (_loaded) {
             [self setProbeStage:@"卸载"];
             NSError *error = nil;
-            ((BOOL(*)(id,SEL,unsigned int,NSError**))objc_msgSend)(_model, NSSelectorFromString(@"unloadWithQoS:error:"), 0, &error);
+            furnace::ane::unloadModel(_model, &error);
         }
     } @catch (NSException *exception) { /* Already stopping. Resources below still need releasing. */ }
     _loaded = NO;
