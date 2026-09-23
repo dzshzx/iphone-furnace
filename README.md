@@ -59,11 +59,19 @@ xcodegen generate
 bash scripts/build.sh
 ```
 
-工作流锁定依赖、Action 提交与 XcodeGen 下载摘要，显式选择 iOS 27 SDK。先编译设备版，再跑模拟器测试，全部通过后上传 arm64 Release IPA；包验证器拒绝模拟器二进制、缺失模型/Metal 内核及意外签名包。产物附带 dSYM、工具链/Git 信息和模拟器界面截图。仅修改 README/验证文档不重新构建。版本 `0.1.0` 表示开发构建，build 号取 Actions run number。
+工作流锁定依赖、Action 提交与 XcodeGen 下载摘要，显式选择 iOS 27 SDK。先编译设备版，再跑模拟器测试；两者通过后上传 arm64 Release IPA，即使截图步骤失败也保留已验证安装包。包验证器拒绝模拟器二进制、缺失模型/Metal 内核及意外签名包。dSYM、工具链/Git 信息和截图放在诊断产物中。仅修改 README/验证文档不重新构建。版本 `0.1.0` 表示开发构建，build 号取 Actions run number。
 
-测试：Xcode 的 `Furnace` scheme 包含会话生命周期、七种选择组合、错误回收、报告、原生 CPU 校验和模拟器 NPU 不可用测试。模拟器与云端 macOS 结果不能证明目标 iPhone 的 GPU/ANE 性能。
+构建环境的关键约定：
+
+- GitHub 镜像可能未安装 Metal 编译组件；工作流显式执行 `xcodebuild -downloadComponent MetalToolchain`。
+- 测试和截图共用显式选定的模拟器 UUID，关闭测试克隆，并在截图前确认启动状态。
+- `actions/upload-artifact` 使用支持单文件上传的固定版本，安装包设置 `archive: false`；诊断文件单独归档。IPA 保留 14 天，诊断产物保留 7 天，过期后可手动触发构建。
+
+模型生成后可运行 `uv run pytest scripts/tests` 验证构建工具；Xcode 的 `Furnace` scheme 包含会话生命周期、七种选择组合、错误回收、报告、原生 CPU、Metal 和模型数值校验，以及模拟器 NPU 不可用测试。完整 Xcode 命令以工作流为准。模拟器与云端 macOS 结果不能证明目标 iPhone 的 GPU/ANE 性能。
 
 ## 结构与依赖
+
+领域术语见 [CONTEXT.md](CONTEXT.md)。
 
 - `Sources/Core`：会话、协议、遥测和报告。
 - `Sources/Engines`、`Sources/Native`：独立 CPU/Metal/Core ML 引擎与私有桥接。引擎资源仅在准备、运行、清理三个阶段流转；停止完成后才能创建下一次会话。

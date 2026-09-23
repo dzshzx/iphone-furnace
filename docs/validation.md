@@ -1,20 +1,15 @@
 # 验证记录
 
-2026-09-23：构建 `0.1.0 (8)` 的安装产物已改为 `.ipa` 单文件直传。
-[直接下载 Furnace-unsigned.ipa](https://github.com/dzshzx/iphone-furnace/actions/runs/35753630279/artifacts/10706688432)。
-[本次工作流](https://github.com/dzshzx/iphone-furnace/actions/runs/35753630279)成功；已从 GitHub 下载该文件，通过 IPA 结构、arm64、iOS 平台及模型/Metal 资源检查。
-符号、构建信息和截图保存在单独的 `build-diagnostics-8` 产物中。
-
 目标：iPhone 18 Pro Max，iOS 27 正式版，普通开发者签名，前台运行。
 
-2026-09-23（北京时间）完成开发构建 `0.1.0 (7)` 的云端验证与下载读回。
-源码提交：`27801c8741425242c8a35503f4c5b71a3878730f`。
+当前交付为开发构建 `0.1.0 (8)`，2026-09-23（北京时间）完成云端验证和 IPA 下载读回。
+构建提交：`6bba40826574901c0d8b96c63535f7c844c12519`。其后的知识文档提交不改变该安装包。
 
-- [完整成功运行](https://github.com/dzshzx/iphone-furnace/actions/runs/35751103761)
-- [未签名 IPA、dSYM、构建信息和界面截图](https://github.com/dzshzx/iphone-furnace/actions/runs/35751103761/artifacts/10706251027)
-- [测试与编译诊断](https://github.com/dzshzx/iphone-furnace/actions/runs/35751103761/artifacts/10706265990)
+- [完整成功运行](https://github.com/dzshzx/iphone-furnace/actions/runs/35753630279)
+- [直接下载 Furnace-unsigned.ipa](https://github.com/dzshzx/iphone-furnace/actions/runs/35753630279/artifacts/10706688432)
+- [dSYM、构建信息、截图及测试诊断](https://github.com/dzshzx/iphone-furnace/actions/runs/35753630279/artifacts/10707248326)
 
-实际工具链为 Xcode 27.0 / build 27A266a、iOS SDK 27.0、macOS 27.0 / 26A428。
+实际工具链为 Xcode 27.0 / build 27A266a、iOS SDK 27.0、macOS 27.0 / 26A5406e。
 构建机上的模拟器计算使用宿主硬件，不作为目标 iPhone 的性能证据。
 
 | 验证项 | 状态 | 证据 |
@@ -29,6 +24,8 @@
 | ANE 实际执行 | 待验证 | Core ML 计算计划只表示预计分配；需要真机轨迹 |
 | 私有 ANE 普通签名可用性 | 待验证 | 目标设备编译/加载/双输入校验结果 |
 | 整机功耗上限 | 未测量 | 不由吞吐量或负载开关推断 |
+
+CI 保留一项工具提示：未依赖 AppIntents，因此跳过该框架的元数据提取；这与当前功能一致，不影响编译或测试。
 
 手机验收时记录签名方式、iOS 完整版本、App build 号、是否充电和环境条件。运行完整自测，确认 UI 可操作、没有持续内存增长、每路计数持续增加，停止后计数停止。停止超过两秒时保留报告，用于缩小单批计算量。
 
