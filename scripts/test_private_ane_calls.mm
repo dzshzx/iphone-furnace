@@ -19,7 +19,7 @@
     fprintf(stderr, "%s requested QoS=%u\n", operation.UTF8String, qos);
     if (qos != QOS_CLASS_DEFAULT) {
         if (error) *error = [NSError errorWithDomain:@"Furnace.TestANE" code:2 userInfo:@{
-            NSLocalizedDescriptionKey: @"Ordinary signing must use explicit default QoS; realtime requests require restricted access"
+            NSLocalizedDescriptionKey: @"ANE lifecycle call must use Furnace's explicit default QoS"
         }];
         return NO;
     }

@@ -4,7 +4,9 @@
 #import <pthread/qos.h>
 
 namespace furnace::ane {
-inline constexpr unsigned int modelQoS = 0;
+// The device rejected QoS 0 as a realtime request requiring a restricted
+// connection. Use explicit ordinary priority for the entire model lifecycle.
+inline constexpr unsigned int modelQoS = QOS_CLASS_DEFAULT;
 
 inline BOOL compileModel(id model, NSError **error) {
     return ((BOOL(*)(id,SEL,unsigned int,id,NSError**))objc_msgSend)(model,
