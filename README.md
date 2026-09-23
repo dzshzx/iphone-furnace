@@ -29,7 +29,7 @@
 
 私有 API 在普通签名的目标 iPhone 上是否可访问仍需真机验证。符号存在不等于可用；权限错误不会回退成 CPU 并冒充成功。调用可能使进程终止：App 会保留进入私有调用前的阶段，下次启动显示中断位置并默认选择 Core ML。缺少 `summary.json` 的报告属于中断会话。
 
-Core ML 后端使用 `.cpuAndNeuralEngine`，检查主要卷积预计被分配到 ANE；预计分配不证明实际执行位置，系统运行时仍可能调整调度。
+Core ML 后端使用 `.cpuAndNeuralEngine`，识别包含版本前缀的卷积算子，并检查卷积全部预计被分配到 ANE。报告保留原始算子名和 ANE/CPU/GPU/未知分配计数；无法识别卷积与未分配到 ANE 分别报错。预计分配不证明实际执行位置，系统运行时仍可能调整调度。
 
 ## 指标与报告
 
@@ -68,6 +68,8 @@ bash scripts/build.sh
 - `actions/upload-artifact` 使用支持单文件上传的固定版本，安装包设置 `archive: false`；诊断文件单独归档。IPA 保留 14 天，诊断产物保留 7 天，过期后可手动触发构建。
 
 模型生成后可运行 `uv run pytest scripts/tests` 验证构建工具；Xcode 的 `Furnace` scheme 包含会话生命周期、七种选择组合、错误回收、报告、原生 CPU、Metal 和模型数值校验，以及模拟器 NPU 不可用测试。完整 Xcode 命令以工作流为准。模拟器与云端 macOS 结果不能证明目标 iPhone 的 GPU/ANE 性能。
+
+计算计划回归覆盖三档真实编译模型的卷积识别，以及 CPU/GPU/未知分配必须拒绝启动。云端另用 `scripts/check_compute_plan.swift` 检查 macOS 的 CPU-only 与 CPU+ANE 计划，记录原始算子名；宿主是否可用 ANE 不作为 iPhone 验收结论。
 
 ## 结构与依赖
 

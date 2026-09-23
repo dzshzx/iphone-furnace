@@ -53,19 +53,13 @@ final class NPUEngine: LoadEngine, @unchecked Sendable {
         }
         let configuration = MLModelConfiguration()
         configuration.computeUnits = .cpuAndNeuralEngine
+        state.withValue { $0.sample.detail = "Core ML · 正在读取模型计算计划" }
         let plan = try await MLComputePlan.load(contentsOf: url, configuration: configuration)
-        guard case .program(let program) = plan.modelStructure,
-              let main = program.functions["main"] else { throw LoadError("无法检查模型计算计划") }
-        let convolutions = NPUComputePlan.convolutions(in: main.block)
-        var aneCount = 0
-        for operation in convolutions {
-            if let usage = plan.deviceUsage(for: operation), case .neuralEngine = usage.preferred {
-                aneCount += 1
-            }
-        }
-        guard !convolutions.isEmpty, aneCount == convolutions.count else {
-            throw LoadError("模型卷积未全部预计分配到 ANE（\(aneCount)/\(convolutions.count)）；不将 CPU 回退计作 NPU 压测")
-        }
+        let inspection = try NPUComputePlan.inspect(plan)
+        // Preserve the raw operator names and assignments even if preparation
+        // fails before the first telemetry sample is written.
+        state.withValue { $0.sample.detail = inspection.detail }
+        try inspection.requireANE()
         for _ in 0..<config.npuConcurrency {
             try Task.checkCancellation()
             let worker = try PredictionWorker(url: url, configuration: configuration, channels: config.npuChannels)
@@ -73,7 +67,7 @@ final class NPUEngine: LoadEngine, @unchecked Sendable {
             workers.append(worker)
         }
         state.withValue {
-            $0.sample.detail = "Core ML · 预计 ANE \(aneCount)/\(convolutions.count) 卷积 · \(config.npuConcurrency) 路 · 实际执行位置待验证"
+            $0.sample.detail = "\(inspection.detail) · \(config.npuConcurrency) 路 · 实际执行位置待验证"
         }
         #endif
     }
