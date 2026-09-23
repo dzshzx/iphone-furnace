@@ -2,28 +2,28 @@
 
 目标：iPhone 18 Pro Max，iOS 27 正式版，普通开发者签名，前台运行。
 
-当前交付为开发构建 `0.1.0 (14)`，2026-09-23（北京时间）完成云端验证和 IPA 下载读回。
-构建提交：`d16e06544cd996dd76618f18134f88b6c9aba5fe`。
+当前可下载交付为开发构建 `0.1.0 (15)`。2026-09-23（北京时间）对源码提交 `550edff7ff680ca08300da43a472bdcdbbe2236f` 完成同提交 Linux 与手动 macOS 运行，并重新下载 IPA 验证。随后更新本记录的文档提交不属于该被验源码提交；不将它记作已运行 macOS。
 
-安装包之后的 `7773a10` 调整了 CI 入口，应用、模型生成器和测试源码相对 build 14 无变化。[当前 Linux 工具检查](https://github.com/dzshzx/iphone-furnace/actions/runs/35841117087)已通过；普通提交的检查与手动 iOS 构建的分工见 [README](../README.md#构建)。新的 Linux → macOS 组合流程尚待首次手动完整运行，现有 build 14 的回执对应此前的完整 iOS 流程。本次收尾审计不触发新构建。
+- [同提交 Linux 工具检查](https://github.com/dzshzx/iphone-furnace/actions/runs/35850104741)：成功
+- [同提交完整 iOS 运行](https://github.com/dzshzx/iphone-furnace/actions/runs/35850124766)：Linux 前置检查与 macOS 构建均成功
+- [直接下载 build 15 未签名 IPA](https://github.com/dzshzx/iphone-furnace/actions/runs/35850124766/artifacts/10745556609)
+- [build 15 诊断产物](https://github.com/dzshzx/iphone-furnace/actions/runs/35850124766/artifacts/10745551619)：报告、日志、xcresult、构建信息与截图
 
-- [完整成功运行](https://github.com/dzshzx/iphone-furnace/actions/runs/35838168344)
-- [直接下载 Furnace-unsigned.ipa](https://github.com/dzshzx/iphone-furnace/actions/runs/35838168344/artifacts/10739714830)
-- [dSYM、构建信息、截图及测试诊断](https://github.com/dzshzx/iphone-furnace/actions/runs/35838168344/artifacts/10740556762)
+上一交付 build 14 的[完整运行](https://github.com/dzshzx/iphone-furnace/actions/runs/35838168344)对应提交 `d16e06544cd996dd76618f18134f88b6c9aba5fe`，保留为历史证据。普通提交与手动 iOS 构建的分工见 [README](../README.md#构建)。
 
-实际工具链为 Xcode 27.0 / build 27A266a、iOS SDK 27.0、macOS 27.0 / 26A5406e。
+build 15 实际工具链为 Xcode 27.0 / build 27A266a、iOS SDK 27.0、macOS 27.0 / 26A5406e、Python 3.14.7、uv 0.8.22、XcodeGen 2.46.0。macOS 准备、设备构建、模拟器测试分别耗时 339 / 54 / 55 秒；准备阶段含 Metal 组件下载。完整计时和阶段状态在诊断产物的 `validation-report.md`。
 构建机上的模拟器计算使用宿主硬件，不作为目标 iPhone 的性能证据。
 
 | 验证项 | 状态 | 证据 |
 |---|---|---|
 | 三档模型生成 | 已通过 | 本地 coremltools 9.0，256/384/512 通道模型完成转换 |
-| Python / 原生数据构建测试 | 已通过 | 8 项；模型图与 IPA 检查、真实格式的模型标识校验、coremltools 读取三档私有权重并验证全部 16 层数值 |
+| Python / 原生数据构建测试 | 已通过 | build 15 Linux 与 macOS 均通过 10 项；模型图与 IPA 检查、真实格式的模型标识校验、三档私有权重全部 16 层数值，以及 CI 报告解析 |
 | 私有 ANE 原生模型构造 | 已通过 | 三档均 `model construction=YES`，阶段“模型文件就绪”，无错误；不涉及 ANE 编译、加载或执行 |
 | 私有 ANE 调用参数回归 | 已通过（模型替身） | 捕获编译、加载、执行、卸载四个实际 ObjC 调用：均为 `QOS_CLASS_DEFAULT=21`；请求对象与底层错误正确传递 |
 | macOS Core ML 计算计划 | 已通过 | 三档模型、CPU-only / CPU+ANE 共六组；每组识别 16 层 `ios18.conv`，旧匹配计数均为 0；宿主均计划分配到 CPU，均被拒绝作为 NPU 压测 |
-| 模拟器测试 | 已通过 | 16 项、0 失败、0 跳过；包括四项新计算计划回归，以及真实 CPU、三种 Metal 负载、Core ML CPU 数值校验及生命周期 |
-| arm64 未签名 IPA | 已通过 | 云端生成后重新下载检查：Mach-O iOS 平台、arm64、最低 iOS 27.0、全部模型及 Metal 内核完整，无签名目录和描述文件 |
-| 界面截图 | build 14 云端仪表盘与用户真机错误画面均已读回 | build 14 的负载选择、读数和开始按钮显示正常；用户截图记录此前编译错误，未显示 build 号；build 10 / 12 的白屏截图不作为界面验收证据 |
+| 模拟器测试 | 已通过 | build 15 iPhone 18 Pro Max / iOS 27.0，16 项、0 失败、0 跳过；`testStopDuringPreparationPreventsLaterStart` 在 xcresult 与测试日志中均为 Passed；涵盖真实 CPU、三种 Metal 负载、Core ML CPU 数值校验及生命周期 |
+| arm64 未签名 IPA | 已通过 | 下载的 build 15 IPA 与 GitHub artifact SHA-256 `b8949191c208e7e3877b60a66722dc2ebf774f586cb6ca19a17b83c51b2c187b` 一致；本地重新运行验证器通过；Info.plist 为 `0.1.0 (15)` / iOS 27.0，三档模型、Metal 内核完整，无签名目录和描述文件 |
+| 界面截图 | build 15 截图未验收 | 本次模拟器截图仅显示白底和状态栏，不作 UI 通过证据；build 14 云端仪表盘曾显示负载选择、读数和开始按钮。真机 UI 仍按本清单验收 |
 | 真机安装与启动 | build 8 已获用户运行报告 | `iPhone19,2` / iOS `27.0`；签名方式未提供 |
 | 真机 CPU / GPU 初步试跑 | 用户反馈正常 | 2026-09-23 反馈；持续时间、负载组合及对应报告待补 |
 | 真机 Core ML NPU 初步试跑 | 修复后用户反馈可运行 | 2026-09-23 反馈，未附新运行的构建号、持续时长和报告；原 build 8 的 `0/0` 失败报告保留为历史证据 |
@@ -58,18 +58,18 @@ Core ML 持续负载验收可先使用 NPU 单独运行、256 通道、1 路并�
 
 | 字段 | 本次记录 |
 |---|---|
-| commit / App 版本与 build 号 | pending；必须与 `build-info.txt` 及 IPA 一致 |
-| CI 宿主 / Xcode / iOS SDK / XcodeGen | pending；见 `validation-report.md` 与 `build-info.txt` |
-| 模拟器设备 / iOS 版本 | pending；见 xcresult 中的 destination |
+| commit / App 版本与 build 号 | 被验 `550edff7ff680ca08300da43a472bdcdbbe2236f` / `0.1.0 (15)`；`build-info.txt` 与 IPA 已核对 |
+| CI 宿主 / Xcode / iOS SDK / XcodeGen | macOS 27.0 / Xcode 27.0 / iOS SDK 27.0 / XcodeGen 2.46.0；见 `validation-report.md` 与 `build-info.txt` |
+| 模拟器设备 / iOS 版本 | iPhone 18 Pro Max / iOS 27.0；见 xcresult destination |
 | 真机型号 / iOS 完整版本 / 签名方式 | pending；由手机验收者填写 |
 | 测试条件 | pending；充电状态、环境条件、所选负载及持续时间 |
 
 | 步骤 | 预期 | 实际 | 证据 |
 |---|---|---|---|
-| Linux 工具检查 | 模型、图标、Python/原生数据构建测试通过 | pending | 同 commit Actions 检查链接 |
-| macOS 私有原生检查与 Core ML 计划 | 模型构造/调用替身通过；计划识别三档模型 | pending | `private-ane-*.log`、`compute-plan.log` |
-| 模拟器 XCTest | 生命周期、选择组合、真实 CPU/Metal/Core ML 调用与准备中停止均通过；失败和跳过逐项记原因 | pending | `validation-report.md`、`tests.xcresult`、`simulator-test.log` |
-| 未签名 IPA | arm64 iOS 包，模型和 Metal 内核齐全，无签名 | pending | IPA、`build-info.txt`、`device-build.log`、验证器输出 |
+| Linux 工具检查 | 模型、图标、Python/原生数据构建测试通过 | 通过；10 项测试 | [同提交运行](https://github.com/dzshzx/iphone-furnace/actions/runs/35850104741) |
+| macOS 私有原生检查与 Core ML 计划 | 模型构造/调用替身通过；计划识别三档模型 | 通过；四阶段 QoS 均 21，三档构造 YES；六组计划各识别 16 层卷积，宿主均分配 CPU | `private-ane-*.log`、`compute-plan.log` |
+| 模拟器 XCTest | 生命周期、选择组合、真实 CPU/Metal/Core ML 调用与准备中停止均通过；失败和跳过逐项记原因 | 通过；16/16、失败 0、跳过 0；准备中停止测试 Passed | `validation-report.md`、`tests.xcresult`、`simulator-test.log` |
+| 未签名 IPA | arm64 iOS 包，模型和 Metal 内核齐全，无签名 | 通过；build 15 下载读回及 SHA-256 核对 | IPA、`build-info.txt`、`device-build.log`、验证器输出 |
 | 真机安装与持续负载 | 同 build 可签名安装；完整自测各路计数增加，停止后计数停止，报告完整 | pending | 签名/安装结果及导出的会话报告 |
 | Core ML 实际 ANE 执行 | 真机轨迹证明实际执行位置 | pending | Performance Trace 或 Instruments 轨迹 |
 | 私有 ANE 普通签名可用性 | 分别记录编译、加载、双输入校验和持续执行阶段 | pending | 真机阶段、reason/detail、报告或中断记录 |
