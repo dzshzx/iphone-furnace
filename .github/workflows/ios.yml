@@ -1,11 +1,7 @@
 name: iOS build
 on:
-  push:
-    branches: [master]
-    paths-ignore:
-      - README.md
-      - docs/**
-  pull_request:
+  # Full Apple-platform validation and IPA delivery are requested together.
+  # Routine pushes and PRs run checks.yml on Linux.
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,7 +9,10 @@ concurrency:
   group: ios-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  checks:
+    uses: ./.github/workflows/checks.yml
   build:
+    needs: checks
     runs-on: xcode-27
     timeout-minutes: 35
     env:

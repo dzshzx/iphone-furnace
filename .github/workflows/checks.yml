@@ -1,0 +1,39 @@
+name: Build tools checks
+
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tools:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: '0.8.22'
+          enable-cache: true
+      - name: Check build scripts
+        run: bash -n scripts/build.sh scripts/check_private_ane.sh
+      - name: Generate models and validate build tools
+        run: |
+          uv sync --frozen
+          uv run python scripts/generate_models.py
+          uv run python scripts/generate_icon.py
+          uv run pytest scripts/tests

@@ -4,7 +4,7 @@
 
 ## 下载与安装
 
-1. 打开 [iOS build](https://github.com/dzshzx/iphone-furnace/actions/workflows/ios.yml)，选择最新成功运行。
+1. 打开 [iOS build](https://github.com/dzshzx/iphone-furnace/actions/workflows/ios.yml)，选择最新成功运行。需要当前提交的新安装包时，点击 **Run workflow**，选择 `master` 并等待构建完成；普通提交不会自动生成 IPA。
 2. 下载产物 `Furnace-unsigned.ipa`，直接交给签名工具；符号、构建信息和截图保存在单独的 `build-diagnostics-<编号>` 产物中。
 3. 使用自己的签名工具、开发者证书和包含设备的描述文件重新签名并安装。IPA 本身未签名，不能直接点击安装；无需向本仓库或 GitHub 提供 Apple 账号。
 4. 如系统要求，在“设置 → 隐私与安全性 → 开发者模式”开启开发者模式。首次启动使用 Core ML 后端。
@@ -58,12 +58,18 @@ Core ML 后端使用 `.cpuAndNeuralEngine`，识别包含版本前缀的卷积�
 uv sync --frozen
 uv run python scripts/generate_models.py
 uv run python scripts/generate_icon.py
+uv run pytest scripts/tests
+bash -n scripts/build.sh scripts/check_private_ane.sh
 # 以下命令需要 Xcode 27.0 和 XcodeGen 2.46.0：
 xcodegen generate
 bash scripts/build.sh
 ```
 
-工作流锁定依赖、Action 提交与 XcodeGen 下载摘要，显式选择 iOS 27 SDK。先编译设备版，再跑模拟器测试；两者通过后上传 arm64 Release IPA，即使截图步骤失败也保留已验证安装包。包验证器拒绝模拟器二进制、缺失模型/Metal 内核及意外签名包。dSYM、工具链/Git 信息和截图放在诊断产物中。仅修改 README/验证文档不重新构建。版本 `0.1.0` 表示开发构建，build 号取 Actions run number。
+`master` 的 push 和 PR 自动运行 **Build tools checks**：在 Linux 上生成三档模型与图标，检查 shell 语法并执行全部 Python / 原生数据构建测试；仅修改 Markdown 或 `docs/` 时跳过。Linux 检查成功只表示工具检查通过，不表示 Swift/Metal 编译、模拟器测试或 IPA 验证完成。
+
+需要交付或验证 Apple 平台改动时，手动运行 **iOS build**。它先复用同一套 Linux 检查，通过后才启动 macOS，完整执行私有 ANE 原生检查、Core ML 计算计划检查、设备构建和模拟器测试。两套工作流各自取消同一分支的旧运行，普通提交的工具检查不会取消手动构建。
+
+工作流锁定依赖、Action 提交与 XcodeGen 下载摘要，显式选择 iOS 27 SDK。先编译设备版，再跑模拟器测试；两者通过后上传 arm64 Release IPA，即使截图步骤失败也保留已验证安装包。包验证器拒绝模拟器二进制、缺失模型/Metal 内核及意外签名包。dSYM、工具链/Git 信息和截图放在诊断产物中。版本 `0.1.0` 表示开发构建，build 号取 Actions run number。
 
 构建环境的关键约定：
 
