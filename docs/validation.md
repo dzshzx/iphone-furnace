@@ -51,3 +51,27 @@ Core ML 持续负载验收可先使用 NPU 单独运行、256 通道、1 路并�
 
 下载包的 bundle ID 为 `com.dzshzx.furnace`，设备类型为 iPhone，方向为竖屏。
 用户已反馈 CPU、GPU、Core ML 初步试跑可用；完整持续负载、功耗和 ANE 实际执行仍待各自证据。
+
+## 同提交完整验收清单
+
+每次完整验收固定一个 commit：先核对该 SHA 的 Linux 工具检查，再对同一 SHA 手动运行 `iOS build`。记录 Actions 运行链接、`build-diagnostics-<编号>` 中的 `validation-report.md` / `tests.xcresult` / `build-info.txt`，以及对应的未签名 IPA。`validation-report.md` 列出 Xcode、SDK、macOS、uv、XcodeGen 版本，测试范围与失败/跳过原因，以及准备、构建、测试耗时；失败时继续核对原始日志。未运行或缺少证据的项目保持 pending。
+
+| 字段 | 本次记录 |
+|---|---|
+| commit / App 版本与 build 号 | pending；必须与 `build-info.txt` 及 IPA 一致 |
+| CI 宿主 / Xcode / iOS SDK / XcodeGen | pending；见 `validation-report.md` 与 `build-info.txt` |
+| 模拟器设备 / iOS 版本 | pending；见 xcresult 中的 destination |
+| 真机型号 / iOS 完整版本 / 签名方式 | pending；由手机验收者填写 |
+| 测试条件 | pending；充电状态、环境条件、所选负载及持续时间 |
+
+| 步骤 | 预期 | 实际 | 证据 |
+|---|---|---|---|
+| Linux 工具检查 | 模型、图标、Python/原生数据构建测试通过 | pending | 同 commit Actions 检查链接 |
+| macOS 私有原生检查与 Core ML 计划 | 模型构造/调用替身通过；计划识别三档模型 | pending | `private-ane-*.log`、`compute-plan.log` |
+| 模拟器 XCTest | 生命周期、选择组合、真实 CPU/Metal/Core ML 调用与准备中停止均通过；失败和跳过逐项记原因 | pending | `validation-report.md`、`tests.xcresult`、`simulator-test.log` |
+| 未签名 IPA | arm64 iOS 包，模型和 Metal 内核齐全，无签名 | pending | IPA、`build-info.txt`、`device-build.log`、验证器输出 |
+| 真机安装与持续负载 | 同 build 可签名安装；完整自测各路计数增加，停止后计数停止，报告完整 | pending | 签名/安装结果及导出的会话报告 |
+| Core ML 实际 ANE 执行 | 真机轨迹证明实际执行位置 | pending | Performance Trace 或 Instruments 轨迹 |
+| 私有 ANE 普通签名可用性 | 分别记录编译、加载、双输入校验和持续执行阶段 | pending | 真机阶段、reason/detail、报告或中断记录 |
+
+真机原始资料由验收者保管；CI 诊断包只放构建和模拟器的合成测试证据。填写“通过”时同时写明实际现象和对应证据位置；任何一步失败或跳过均记录原因，不以模拟器或模型构造结果替代真机结论。

@@ -20,7 +20,17 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Check private ANE model construction
-        run: bash scripts/check_private_ane.sh
+        id: private-ane
+        run: |
+          mkdir -p build
+          date +%s > build/preparation-start.txt
+          started=$SECONDS
+          trap 'printf "private-ane\t%d\n" "$((SECONDS-started))" >> build/ci-timings.tsv' EXIT
+          bash scripts/check_private_ane.sh >build/private-ane-step.log 2>&1 || {
+            cat build/private-ane-step.log
+            exit 1
+          }
+          cat build/private-ane-step.log
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
           version: '0.8.22'
@@ -40,17 +50,29 @@ jobs:
           unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP/xcodegen"
           echo "$RUNNER_TEMP/xcodegen/xcodegen/bin" >> "$GITHUB_PATH"
       - name: Generate models and project
-        run: |
-          uv sync --frozen
-          uv run python scripts/generate_models.py
-          uv run python scripts/generate_icon.py
-          uv run pytest scripts/tests
-          xcodegen generate
-      - name: Inspect compiled Core ML plans
+        id: models
         run: |
           mkdir -p build
+          started=$SECONDS
+          trap 'printf "models\t%d\n" "$((SECONDS-started))" >> build/ci-timings.tsv' EXIT
+          uv sync --frozen >build/models.log 2>&1
+          uv run python scripts/generate_models.py >>build/models.log 2>&1
+          uv run python scripts/generate_icon.py >>build/models.log 2>&1
+          uv run pytest scripts/tests >>build/models.log 2>&1
+          xcodegen generate >>build/models.log 2>&1
+          tail -n 30 build/models.log
+      - name: Inspect compiled Core ML plans
+        id: compute-plan
+        run: |
+          mkdir -p build
+          started=$SECONDS
+          trap 'printf "compute-plan\t%d\n" "$((SECONDS-started))" >> build/ci-timings.tsv' EXIT
           xcrun swiftc -swift-version 6 -strict-concurrency=complete -parse-as-library \
-            Sources/Core/Types.swift Sources/Engines/NPUComputePlan.swift scripts/check_compute_plan.swift -o build/check-compute-plan
+            Sources/Core/Types.swift Sources/Engines/NPUComputePlan.swift scripts/check_compute_plan.swift -o build/check-compute-plan \
+            >build/compute-plan-build.log 2>&1 || {
+              cat build/compute-plan-build.log
+              exit 1
+            }
           build/check-compute-plan Models/Stress{256,384,512}.mlpackage >build/compute-plan.log 2>&1 || {
             cat build/compute-plan.log
             exit 1
@@ -58,11 +80,18 @@ jobs:
           cat build/compute-plan.log
       - name: Build unsigned IPA
         id: device-build
-        run: bash scripts/build.sh
+        run: |
+          mkdir -p build
+          date +%s > build/preparation-end.txt
+          started=$SECONDS
+          trap 'printf "device-build\t%d\n" "$((SECONDS-started))" >> build/ci-timings.tsv' EXIT
+          bash scripts/build.sh
       - name: Simulator lifecycle tests
         id: simulator-tests
         run: |
           mkdir -p build
+          started=$SECONDS
+          trap 'printf "simulator-tests\t%d\n" "$((SECONDS-started))" >> build/ci-timings.tsv' EXIT
           xcodebuild -project Furnace.xcodeproj -scheme Furnace -configuration Debug \
             -destination "platform=iOS Simulator,id=$FURNACE_SIMULATOR_ID" -parallel-testing-enabled NO \
             -derivedDataPath build/simulator -resultBundlePath build/tests.xcresult \
@@ -77,6 +106,24 @@ jobs:
           xcrun simctl launch "$FURNACE_SIMULATOR_ID" com.dzshzx.furnace
           sleep 2
           xcrun simctl io "$FURNACE_SIMULATOR_ID" screenshot dist/simulator-dashboard.png
+      - name: Summarize macOS validation
+        if: always()
+        run: |
+          mkdir -p build dist
+          if [ -d build/tests.xcresult ]; then
+            xcrun xcresulttool get test-results summary --path build/tests.xcresult >build/test-summary.json || rm -f build/test-summary.json
+            xcrun xcresulttool get test-results tests --path build/tests.xcresult >build/test-cases.json || rm -f build/test-cases.json
+          fi
+          versions="$(xcodebuild -version | tr '\n' ' '); iOS SDK $(xcrun --sdk iphoneos --show-sdk-version); macOS $(sw_vers -productVersion); $(python3 --version); $(uv --version 2>/dev/null || printf 'uv unavailable'); XcodeGen $(xcodegen --version 2>/dev/null || printf unavailable)"
+          python3 scripts/ci_report.py \
+            --commit "$GITHUB_SHA" --build "$GITHUB_RUN_NUMBER" --versions "$versions" \
+            --private-ane '${{ steps.private-ane.outcome }}' \
+            --models '${{ steps.models.outcome }}' \
+            --compute-plan '${{ steps.compute-plan.outcome }}' \
+            --device-build '${{ steps.device-build.outcome }}' \
+            --simulator-tests '${{ steps.simulator-tests.outcome }}' \
+            | tee dist/validation-report.md
+          cat dist/validation-report.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload IPA directly
         if: always() && steps.device-build.outcome == 'success' && steps.simulator-tests.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -92,9 +139,15 @@ jobs:
           name: build-diagnostics-${{ github.run_number }}
           path: |
             build/*.log
+            build/ci-timings.tsv
+            build/preparation-start.txt
+            build/preparation-end.txt
+            build/test-summary.json
+            build/test-cases.json
             build/tests.xcresult
             Models/manifest.json
             dist/Furnace.dSYM.zip
             dist/build-info.txt
+            dist/validation-report.md
             dist/simulator-dashboard.png
           retention-days: 7

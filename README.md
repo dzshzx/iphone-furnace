@@ -69,6 +69,8 @@ bash scripts/build.sh
 
 需要交付或验证 Apple 平台改动时，手动运行 **iOS build**。它先复用同一套 Linux 检查，通过后才启动 macOS，完整执行私有 ANE 原生检查、Core ML 计算计划检查、设备构建和模拟器测试。两套工作流各自取消同一分支的旧运行，普通提交的工具检查不会取消手动构建。
 
+同次 macOS 运行的 Summary 和 `build-diagnostics-<编号>` 内 `validation-report.md` 记录提交/build 号、工具版本、准备/构建/测试耗时、模拟器通过/失败/跳过数及可提取的原因。原始 `tests.xcresult` 与构建、测试日志仍随诊断产物保留。报告分别列出模拟器、未签名 IPA、真机与 ANE 状态；CI 无真机时后两项保持 pending。手机人工验收记录字段见 [验证记录](docs/validation.md#同提交完整验收清单)。报告只使用 CI 的合成测试和构建证据，不收集手机报告、凭据或环境变量。
+
 工作流锁定依赖、Action 提交与 XcodeGen 下载摘要，显式选择 iOS 27 SDK。先编译设备版，再跑模拟器测试；两者通过后上传 arm64 Release IPA，即使截图步骤失败也保留已验证安装包。包验证器拒绝模拟器二进制、缺失模型/Metal 内核及意外签名包。dSYM、工具链/Git 信息和截图放在诊断产物中。版本 `0.1.0` 表示开发构建，build 号取 Actions run number。
 
 构建环境的关键约定：

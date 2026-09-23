@@ -7,14 +7,15 @@ private final class FakeEngine: LoadEngine, @unchecked Sendable {
     let unit: UnitKind
     let prepareFailure: Bool
     let runtimeFailure: Bool
-    let delay: Duration
+    let onPrepare: (@Sendable () async -> Void)?
     let state = Locked((started: false, stops: 0))
-    init(_ unit: UnitKind, prepareFailure: Bool = false, runtimeFailure: Bool = false, delay: Duration = .zero) {
+    init(_ unit: UnitKind, prepareFailure: Bool = false, runtimeFailure: Bool = false,
+         onPrepare: (@Sendable () async -> Void)? = nil) {
         self.unit = unit; self.prepareFailure = prepareFailure
-        self.runtimeFailure = runtimeFailure; self.delay = delay
+        self.runtimeFailure = runtimeFailure; self.onPrepare = onPrepare
     }
     func prepare() async throws {
-        if delay != .zero { try await Task.sleep(for: delay) }
+        await onPrepare?()
         if prepareFailure { throw LoadError("backend unavailable") }
     }
     func start() { state.withValue { $0.started = true } }
@@ -22,6 +23,34 @@ private final class FakeEngine: LoadEngine, @unchecked Sendable {
     func sample() -> EngineSnapshot {
         EngineSnapshot(unit: unit, completed: state.withValue { $0.started ? 10 : 0 },
             detail: "test double", error: runtimeFailure && state.withValue({ $0.started }) ? "execution failed" : nil)
+    }
+}
+
+private actor PreparationGate {
+    private var entered = false
+    private var released = false
+    private var entryWaiter: CheckedContinuation<Void, Never>?
+    private var releaseWaiter: CheckedContinuation<Void, Never>?
+
+    func prepare() async {
+        entered = true
+        entryWaiter?.resume()
+        entryWaiter = nil
+        if !released {
+            await withCheckedContinuation { releaseWaiter = $0 }
+        }
+    }
+
+    func waitUntilEntered() async {
+        if !entered {
+            await withCheckedContinuation { entryWaiter = $0 }
+        }
+    }
+
+    func release() {
+        released = true
+        releaseWaiter?.resume()
+        releaseWaiter = nil
     }
 }
 
@@ -63,13 +92,20 @@ private final class FakeEngine: LoadEngine, @unchecked Sendable {
     }
 
     func testStopDuringPreparationPreventsLaterStart() async throws {
-        let engine = FakeEngine(.npu, delay: .seconds(1))
+        let gate = PreparationGate()
+        let engine = FakeEngine(.npu, onPrepare: { await gate.prepare() })
         let controller = SessionController(reportRoot: root()) { _ in [engine] }
         controller.start()
-        try await Task.sleep(for: .milliseconds(20))
+        await gate.waitUntilEntered()
+        XCTAssertEqual(controller.phase, .preparing)
         controller.stop(reason: "background")
+        XCTAssertEqual(controller.phase, .stopping)
+        XCTAssertEqual(engine.state.withValue { $0.stops }, 0)
+        await gate.release()
         try await waitFor { !controller.phase.busy }
         XCTAssertFalse(engine.state.withValue { $0.started })
+        XCTAssertEqual(engine.state.withValue { $0.stops }, 1)
+        XCTAssertEqual(controller.phase, .completed)
         XCTAssertEqual(controller.message, "background")
     }
 
