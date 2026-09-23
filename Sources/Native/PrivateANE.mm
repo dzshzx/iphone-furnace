@@ -1,6 +1,7 @@
 // Private API sequence and MIL blob layout adapted from maderix/ANE (MIT).
 // See THIRD_PARTY_NOTICES.md. These calls remain experimental on iOS.
 #import "PrivateANE.h"
+#include "ANEModelData.h"
 #import <IOSurface/IOSurfaceRef.h>
 #import <objc/message.h>
 #import <dlfcn.h>
@@ -34,12 +35,13 @@
 - (BOOL)fail:(NSString *)message underlying:(NSError *)underlying output:(NSError **)error {
     if (error) *error = [NSError errorWithDomain:@"Furnace.PrivateANE" code:1 userInfo:@{
         NSLocalizedDescriptionKey: [NSString stringWithFormat:@"私有 ANE %@：%@%@", self.stage, message,
-            underlying ? [@" · " stringByAppendingString:underlying.localizedDescription] : @""]
+            underlying ? [NSString stringWithFormat:@" · %@ (%@/%ld)", underlying.localizedDescription,
+                          underlying.domain, (long)underlying.code] : @""]
     }];
     return NO;
 }
 
-- (BOOL)prepareWithChannels:(NSInteger)channels error:(NSError **)error {
+- (BOOL)prepareModelWithChannels:(NSInteger)channels error:(NSError **)error {
     @try {
         [self setProbeStage:@"加载框架"];
         if (channels != 256 && channels != 384 && channels != 512)
@@ -65,21 +67,8 @@
         const NSInteger depth = 16;
         NSUInteger weightSize = channels * channels * 2;
         NSUInteger chunkSize = 64 + weightSize;
-        NSMutableData *weights = [NSMutableData dataWithLength:64 + chunkSize * depth];
-        uint8_t *bytes = static_cast<uint8_t *>(weights.mutableBytes);
-        bytes[0] = 1; bytes[4] = 2;
-        for (NSInteger layer = 0; layer < depth; ++layer) {
-            uint8_t *chunk = bytes + 64 + chunkSize * layer;
-            chunk[0] = 0xEF; chunk[1] = 0xBE; chunk[2] = 0xAD; chunk[3] = 0xDE;
-            chunk[4] = 1; chunk[10] = 0x10;
-            _Float16 *values = reinterpret_cast<_Float16 *>(chunk + 64);
-            for (NSInteger row = 0; row < channels; ++row) {
-                double sum = 0;
-                for (NSInteger col = 0; col < channels; ++col) sum += 1 + ((row + col + layer) % 7);
-                for (NSInteger col = 0; col < channels; ++col)
-                    values[row * channels + col] = (_Float16)((1 + ((row + col + layer) % 7)) / sum);
-            }
-        }
+        const auto weightBlob = furnace::ane::buildWeightBlob(channels);
+        NSData *weights = [NSData dataWithBytes:weightBlob.data() length:weightBlob.size()];
         NSMutableString *mil = [NSMutableString stringWithString:
             @"program(1.3)\n[buildInfo = dict<string, string>({{\"coremlc-component-MIL\", \"3510.2.1\"}, {\"coremlc-version\", \"3505.4.1\"}, {\"coremltools-component-milinternal\", \"\"}, {\"coremltools-version\", \"9.0\"}})]\n{\n"];
         [mil appendFormat:@"func main<ios18>(tensor<fp16, [1, %ld, 64, 64]> x) {\n", (long)channels];
@@ -102,21 +91,27 @@
         NSData *milData = [mil dataUsingEncoding:NSUTF8StringEncoding];
         id descriptor = ((id(*)(id,SEL,id,id,id))objc_msgSend)(descriptorClass, descriptorSEL, milData,
             @{@"@model_path/weights/weight.bin": @{@"offset": @0, @"data": weights}}, nil);
+        if (!descriptor) return [self fail:@"模型描述符创建失败" underlying:nil output:error];
         // Retain every input for the entire experiment; ownership across an
         // undocumented ABI must not depend on the local autorelease pool.
         _descriptor = descriptor; _milData = milData; _weightData = weights;
-        _model = descriptor ? ((id(*)(id,SEL,id))objc_msgSend)(modelClass, modelSEL, descriptor) : nil;
+        _model = ((id(*)(id,SEL,id))objc_msgSend)(modelClass, modelSEL, descriptor);
+        if (!_model) return [self fail:@"模型实例创建失败" underlying:nil output:error];
         for (NSString *method in @[@"hexStringIdentifier", @"compileWithQoS:options:error:", @"loadWithQoS:options:error:",
                                    @"evaluateWithQoS:options:request:error:", @"unloadWithQoS:error:"]) {
             if (![_model respondsToSelector:NSSelectorFromString(method)])
                 return [self fail:[@"模型接口缺失 " stringByAppendingString:method] underlying:nil output:error];
         }
+        [self setProbeStage:@"读取模型标识"];
         NSString *identifier = ((id(*)(id,SEL))objc_msgSend)(_model, NSSelectorFromString(@"hexStringIdentifier"));
-        NSLog(@"[DEBUG-private-ane-id] type=%@ value=%@", identifier ? NSStringFromClass(identifier.class) : @"nil", identifier);
-        NSCharacterSet *nonHex = [[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdefABCDEF"] invertedSet];
-        if (![identifier isKindOfClass:NSString.class] || identifier.length == 0 || identifier.length > 256 ||
-            [identifier rangeOfCharacterFromSet:nonHex].location != NSNotFound)
-            return [self fail:@"模型标识无效" underlying:nil output:error];
+        NSData *identifierData = [identifier isKindOfClass:NSString.class] ? [identifier dataUsingEncoding:NSUTF8StringEncoding] : nil;
+        const std::string_view identifierView = identifierData.length
+            ? std::string_view(static_cast<const char *>(identifierData.bytes), identifierData.length) : std::string_view{};
+        if (!furnace::ane::validModelIdentifier(identifierView))
+            return [self fail:[NSString stringWithFormat:@"模型标识无效（类型 %@，UTF-8 长度 %lu）",
+                identifier ? NSStringFromClass(identifier.class) : @"nil", (unsigned long)identifierData.length]
+                underlying:nil output:error];
+        [self setProbeStage:@"写入模型文件"];
         _directory = [NSTemporaryDirectory() stringByAppendingPathComponent:identifier];
         NSFileManager *fm = NSFileManager.defaultManager;
         NSError *underlying = nil;
@@ -124,6 +119,17 @@
             ![milData writeToFile:[_directory stringByAppendingPathComponent:@"model.mil"] options:NSDataWritingAtomic error:&underlying] ||
             ![weights writeToFile:[_directory stringByAppendingPathComponent:@"weights/weight.bin"] options:NSDataWritingAtomic error:&underlying])
             return [self fail:@"临时模型写入失败" underlying:underlying output:error];
+        [self setProbeStage:@"模型文件就绪"];
+        return YES;
+    } @catch (NSException *exception) {
+        return [self fail:exception.reason ?: @"Objective-C 异常" underlying:nil output:error];
+    }
+}
+
+- (BOOL)prepareWithChannels:(NSInteger)channels error:(NSError **)error {
+    if (![self prepareModelWithChannels:channels error:error]) return NO;
+    @try {
+        NSError *underlying = nil;
         [self setProbeStage:@"编译"];
         if (!((BOOL(*)(id,SEL,unsigned int,id,NSError**))objc_msgSend)(_model, NSSelectorFromString(@"compileWithQoS:options:error:"), 0, @{}, &underlying))
             return [self fail:@"编译被拒绝或失败" underlying:underlying output:error];
@@ -139,6 +145,10 @@
         _input = IOSurfaceCreate((__bridge CFDictionaryRef)surfaceProperties);
         _output = IOSurfaceCreate((__bridge CFDictionaryRef)surfaceProperties);
         if (!_input || !_output) return [self fail:@"IOSurface 分配失败" underlying:nil output:error];
+        Class surfaceClass = NSClassFromString(@"_ANEIOSurfaceObject");
+        Class requestClass = NSClassFromString(@"_ANERequest");
+        SEL surfaceSEL = NSSelectorFromString(@"objectWithIOSurface:");
+        SEL requestSEL = NSSelectorFromString(@"requestWithInputs:inputIndices:outputs:outputIndices:weightsBuffer:perfStats:procedureIndex:");
         id inputWrapper = ((id(*)(id,SEL,IOSurfaceRef))objc_msgSend)(surfaceClass, surfaceSEL, _input);
         id outputWrapper = ((id(*)(id,SEL,IOSurfaceRef))objc_msgSend)(surfaceClass, surfaceSEL, _output);
         if (!inputWrapper || !outputWrapper) return [self fail:@"IOSurface 包装失败" underlying:nil output:error];

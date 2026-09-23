@@ -44,7 +44,11 @@ final class NPUEngine: LoadEngine, @unchecked Sendable {
         if config.npuBackend == .experimental {
             let bridge = FurnaceANE()
             privateBridge = bridge
-            try bridge.prepare(channels: config.npuChannels)
+            do { try bridge.prepare(channels: config.npuChannels) }
+            catch {
+                state.withValue { $0.sample.detail = "私有 ANE · \(bridge.stage)" }
+                throw error
+            }
             state.withValue { $0.sample.detail = "私有 ANE · 编译/加载/双输入校验通过 · 串行执行" }
             return
         }
