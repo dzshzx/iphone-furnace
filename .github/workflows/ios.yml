@@ -7,13 +7,34 @@ on:
       - docs/**
   pull_request:
   workflow_dispatch:
+    inputs:
+      private_ane_probe_only:
+        description: Run the native private ANE diagnostic without building an IPA
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
   group: ios-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  private-ane-probe:
+    if: inputs.private_ane_probe_only == true
+    runs-on: xcode-27
+    timeout-minutes: 5
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Probe private ANE bridge
+        run: |
+          mkdir -p build
+          xcrun clang++ -std=c++20 -fobjc-arc -I Sources/Native \
+            -framework Foundation -framework IOSurface \
+            Sources/Native/PrivateANE.mm scripts/probe_private_ane.mm -o build/probe-private-ane
+          build/probe-private-ane
   build:
+    if: inputs.private_ane_probe_only != true
     runs-on: xcode-27
     timeout-minutes: 35
     env:

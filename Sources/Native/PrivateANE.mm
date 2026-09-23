@@ -112,6 +112,7 @@
                 return [self fail:[@"模型接口缺失 " stringByAppendingString:method] underlying:nil output:error];
         }
         NSString *identifier = ((id(*)(id,SEL))objc_msgSend)(_model, NSSelectorFromString(@"hexStringIdentifier"));
+        NSLog(@"[DEBUG-private-ane-id] type=%@ value=%@", identifier ? NSStringFromClass(identifier.class) : @"nil", identifier);
         NSCharacterSet *nonHex = [[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdefABCDEF"] invertedSet];
         if (![identifier isKindOfClass:NSString.class] || identifier.length == 0 || identifier.length > 256 ||
             [identifier rangeOfCharacterFromSet:nonHex].location != NSNotFound)
