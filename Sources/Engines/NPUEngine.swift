@@ -56,7 +56,7 @@ final class NPUEngine: LoadEngine, @unchecked Sendable {
         let plan = try await MLComputePlan.load(contentsOf: url, configuration: configuration)
         guard case .program(let program) = plan.modelStructure,
               let main = program.functions["main"] else { throw LoadError("无法检查模型计算计划") }
-        let convolutions = main.block.operations.filter { $0.operatorName == "conv" }
+        let convolutions = NPUComputePlan.convolutions(in: main.block)
         var aneCount = 0
         for operation in convolutions {
             if let usage = plan.deviceUsage(for: operation), case .neuralEngine = usage.preferred {

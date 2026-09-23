@@ -45,6 +45,15 @@ jobs:
           uv run python scripts/generate_icon.py
           uv run pytest scripts/tests
           xcodegen generate
+      - name: Inspect compiled Core ML plans
+        run: |
+          mkdir -p build
+          xcrun swiftc -parse-as-library Sources/Engines/NPUComputePlan.swift scripts/check_compute_plan.swift -o build/check-compute-plan
+          build/check-compute-plan Models/Stress{256,384,512}.mlpackage >build/compute-plan.log 2>&1 || {
+            cat build/compute-plan.log
+            exit 1
+          }
+          cat build/compute-plan.log
       - name: Build unsigned IPA
         id: device-build
         run: bash scripts/build.sh
