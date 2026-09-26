@@ -9,6 +9,8 @@
 #import <mach/kern_return.h>
 #include <cmath>
 
+NSString *const FurnaceANEInterruptedStageKey = @"privateANE.interruptedStage";
+
 @implementation FurnaceANE {
     id _model;
     id _request;
@@ -28,9 +30,10 @@
 - (void)setProbeStage:(NSString *)stage {
     _stage = stage;
     // Persist before crossing an unsupported ABI. A process crash cannot be
-    // caught with @try, so the next launch reads this marker instead.
+    // caught with @try, so the next launch reads this marker instead and
+    // removes it (SessionController), so one interruption is reported once.
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    [defaults setObject:stage forKey:@"privateANE.interruptedStage"];
+    [defaults setObject:stage forKey:FurnaceANEInterruptedStageKey];
     [defaults synchronize];
 }
 - (BOOL)fail:(NSString *)message underlying:(NSError *)underlying output:(NSError **)error {
@@ -207,7 +210,7 @@
     if (_input) { CFRelease(_input); _input = nullptr; }
     if (_output) { CFRelease(_output); _output = nullptr; }
     if (_directory) { [NSFileManager.defaultManager removeItemAtPath:_directory error:nil]; _directory = nil; }
-    [NSUserDefaults.standardUserDefaults removeObjectForKey:@"privateANE.interruptedStage"];
+    [NSUserDefaults.standardUserDefaults removeObjectForKey:FurnaceANEInterruptedStageKey];
 }
 - (void)dealloc { [self close]; }
 @end

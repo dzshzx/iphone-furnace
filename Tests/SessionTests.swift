@@ -133,6 +133,22 @@ private actor PreparationGate {
         }
     }
 
+    func testInterruptedPrivateANEMarkerIsShownOnceThenCleared() throws {
+        let suite = "furnace.tests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("编译", forKey: SessionController.interruptedPrivateStageKey)
+
+        let first = SessionController(reportRoot: root(), defaults: defaults) { _ in [] }
+        XCTAssertEqual(first.interruptedPrivateStage, "编译")
+        XCTAssertTrue(first.message.contains("「编译」中断"))
+        XCTAssertNil(defaults.string(forKey: SessionController.interruptedPrivateStageKey))
+
+        let second = SessionController(reportRoot: root(), defaults: defaults) { _ in [] }
+        XCTAssertNil(second.interruptedPrivateStage)
+        XCTAssertEqual(second.message, "选择负载，开始压测")
+    }
+
     func testEmptySelectionFailsBeforeAllocating() {
         let controller = SessionController(reportRoot: root()) { _ in XCTFail("factory must not run"); return [] }
         controller.configuration.units = []

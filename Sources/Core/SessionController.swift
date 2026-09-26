@@ -32,11 +32,19 @@ import os
     @ObservationIgnored private let factory: @Sendable (RunConfiguration) -> [any LoadEngine]
     @ObservationIgnored private let reportRoot: URL?
 
-    init(reportRoot: URL? = nil, factory: @escaping @Sendable (RunConfiguration) -> [any LoadEngine] = SessionController.makeEngines) {
+    static let interruptedPrivateStageKey: String = FurnaceANEInterruptedStageKey
+
+    init(reportRoot: URL? = nil, defaults: UserDefaults = .standard,
+         factory: @escaping @Sendable (RunConfiguration) -> [any LoadEngine] = SessionController.makeEngines) {
         self.reportRoot = reportRoot
         self.factory = factory
-        interruptedPrivateStage = UserDefaults.standard.string(forKey: "privateANE.interruptedStage")
-        if let interruptedPrivateStage { message = "上次私有 ANE 在「\(interruptedPrivateStage)」中断；已恢复 Core ML 默认后端" }
+        // The native bridge writes the marker before each unsupported private-ANE call and removes it on close.
+        // Consume it here: the notice belongs to the launch right after the interruption, not to every later one.
+        interruptedPrivateStage = defaults.string(forKey: Self.interruptedPrivateStageKey)
+        if let interruptedPrivateStage {
+            defaults.removeObject(forKey: Self.interruptedPrivateStageKey)
+            message = "上次私有 ANE 在「\(interruptedPrivateStage)」中断；已恢复 Core ML 默认后端"
+        }
     }
 
     nonisolated static func makeEngines(_ config: RunConfiguration) -> [any LoadEngine] {
