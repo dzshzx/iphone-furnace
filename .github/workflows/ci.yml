@@ -1,11 +1,10 @@
 name: Build tools checks
 
 on:
+  # Every candidate runs the checks, documentation-only ones included:
+  # promote.yml fast-forwards master only to a SHA with a green run.
   push:
-    branches: [master]
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
+    branches: [master, "candidate/**"]
   pull_request:
     paths-ignore:
       - '**/*.md'
