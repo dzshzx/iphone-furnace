@@ -65,7 +65,7 @@ xcodegen generate
 bash scripts/build.sh
 ```
 
-`master` 的 push 和 PR 自动运行 **Build tools checks**：在 Linux 上生成三档模型与图标，检查 shell 语法并执行全部 Python / 原生数据构建测试；仅修改 Markdown 或 `docs/` 时跳过。Linux 检查成功只表示工具检查通过，不表示 Swift/Metal 编译、模拟器测试或 IPA 验证完成。
+改动只以候选形式进入 `master`：在已 rebase 到 `origin/master` 的干净任务分支上运行 `scripts/candidate.sh`，它把当前提交推成 `candidate/**` 分支并自动运行 **Build tools checks**（`.github/workflows/ci.yml`）：在 Linux 上生成三档模型与图标，检查 shell 语法并执行全部 Python / 原生数据构建测试；纯文档候选同样运行。该 SHA 的检查全绿后，`promote.yml` 把 `master` 快进到它，`master` 规则要求每个推入的 SHA 都有通过的 `tools` 检查。Linux 检查成功只表示工具检查通过，不表示 Swift/Metal 编译、模拟器测试或 IPA 验证完成。
 
 需要交付或验证 Apple 平台改动时，手动运行 **iOS build**。它先复用同一套 Linux 检查，通过后才启动 macOS，完整执行私有 ANE 原生检查、Core ML 计算计划检查、设备构建和模拟器测试。两套工作流各自取消同一分支的旧运行，普通提交的工具检查不会取消手动构建。
 
