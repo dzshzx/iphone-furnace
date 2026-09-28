@@ -7,3 +7,6 @@ dependencies = ["coremltools==9.0", "numpy==2.2.6"]
 [dependency-groups]
 dev = ["pytest==8.4.2", "pyyaml==6.0.2"]
 
+
+# ruff format 使用默认风格；版本固定在 scripts/format.sh。
+[tool.ruff]

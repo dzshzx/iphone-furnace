@@ -43,3 +43,11 @@ def test_report_marks_missing_mac_results_pending(tmp_path):
     assert "准备/构建/测试耗时：pending / pending / pending" in report
     assert "无可解析的 xcresult 摘要" in report
     assert "已检查 arm64" not in report
+
+
+def test_report_reads_marketing_version_in_either_quote_style(tmp_path):
+    outcomes = {name: "skipped" for name in (
+        "private-ane", "models", "compute-plan", "device-build", "simulator-tests")}
+    for line in ('MARKETING_VERSION: "1.2.3"', "MARKETING_VERSION: '1.2.3'", "MARKETING_VERSION: 1.2.3"):
+        (tmp_path / "project.yml").write_text(f"settings:\n  base:\n    {line}\n")
+        assert "build：`1.2.3 (42)`" in render(tmp_path, outcomes, "abc123", "42", "Xcode")

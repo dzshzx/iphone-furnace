@@ -1,0 +1,7 @@
+# prettier 只经 scripts/format.sh 处理；以下文件字节须保持不变，与 format.sh 的 EXCLUDE 同步。
+node_modules/
+vendor/
+dist/
+uv.lock
+*.xcassets/
+THIRD_PARTY_NOTICES.md

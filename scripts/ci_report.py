@@ -81,7 +81,7 @@ def skip_reason(path, test_name):
 def render(root, outcomes, commit, build, versions):
     durations = timings(root / "build/ci-timings.tsv")
     project = root / "project.yml"
-    match = re.search(r'^\s*MARKETING_VERSION:\s*"([^"]+)"', project.read_text(), re.MULTILINE) if project.exists() else None
+    match = re.search(r'^\s*MARKETING_VERSION:\s*["\']?([^"\'\s#]+)', project.read_text(), re.MULTILINE) if project.exists() else None
     app_version = match.group(1) if match else "unknown"
     summary = load_json(root / "build/test-summary.json")
     cases = test_cases(load_json(root / "build/test-cases.json"))
