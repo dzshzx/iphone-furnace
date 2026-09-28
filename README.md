@@ -37,14 +37,14 @@ Core ML 后端使用 `.cpuAndNeuralEngine`，识别包含版本前缀的卷积�
 
 ## 指标与报告
 
-| 字段 | 含义 |
-|---|---|
-| CPU % | 当前进程 CPU 时间增量 / 墙钟时间 / 设备核心数；包含 GPU/NPU 调度 |
-| GPU 次/秒、ms | 本 App 完成的批次数和 command buffer 时间，不是整颗 GPU 利用率 |
-| NPU 次/秒、ms | 推理完成次数及端到端时间；Core ML 分配计划单独记录 |
-| 内存 | 进程 physical footprint |
-| 热状态 | 系统 nominal/fair/serious/critical 分类，不是摄氏温度 |
-| 功耗、ANE 利用率 | 不可用，不推算或显示虚构数值 |
+| 字段             | 含义                                                             |
+| ---------------- | ---------------------------------------------------------------- |
+| CPU %            | 当前进程 CPU 时间增量 / 墙钟时间 / 设备核心数；包含 GPU/NPU 调度 |
+| GPU 次/秒、ms    | 本 App 完成的批次数和 command buffer 时间，不是整颗 GPU 利用率   |
+| NPU 次/秒、ms    | 推理完成次数及端到端时间；Core ML 分配计划单独记录               |
+| 内存             | 进程 physical footprint                                          |
+| 热状态           | 系统 nominal/fair/serious/critical 分类，不是摄氏温度            |
+| 功耗、ANE 利用率 | 不可用，不推算或显示虚构数值                                     |
 
 每次会话生成 `metadata.json`、`samples.jsonl`、`samples.csv` 和 `summary.json`。元数据包含配置、系统、设备、版本和指标口径。界面只保留最近 180 个样本；单次逐秒日志达到 64 MiB 后停止写入新样本，继续计算，最终 summary 记录丢弃样本数及累计值。已有日志不自动删除。
 

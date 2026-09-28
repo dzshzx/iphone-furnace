@@ -4,7 +4,7 @@ on:
   # Every candidate runs the checks, documentation-only ones included:
   # promote.yml fast-forwards master only to a SHA with a green run.
   push:
-    branches: [master, "candidate/**"]
+    branches: [master, 'candidate/**']
   pull_request:
     paths-ignore:
       - '**/*.md'

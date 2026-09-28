@@ -1,4 +1,5 @@
 """Reject simulator builds, incomplete model bundles and accidentally signed IPAs."""
+
 import argparse
 import plistlib
 import struct
@@ -10,7 +11,9 @@ def verify(path):
         names = archive.namelist()
         prefix = "Payload/Furnace.app/"
         info = plistlib.loads(archive.read(prefix + "Info.plist"))
-        assert info["CFBundleSupportedPlatforms"] == ["iPhoneOS"], "not an iPhone device build"
+        assert info["CFBundleSupportedPlatforms"] == ["iPhoneOS"], (
+            "not an iPhone device build"
+        )
         assert info["MinimumOSVersion"] == "27.0", "wrong deployment target"
         binary = archive.read(prefix + info["CFBundleExecutable"])
         magic, cpu, _, _, count, _, _, _ = struct.unpack_from("<8I", binary)
@@ -25,14 +28,20 @@ def verify(path):
             offset += size
         assert platforms == [2], f"expected iOS platform, found {platforms}"
         for channels in (256, 384, 512):
-            assert any(n.startswith(prefix + f"Stress{channels}.mlmodelc/") for n in names), "missing model"
+            assert any(
+                n.startswith(prefix + f"Stress{channels}.mlmodelc/") for n in names
+            ), "missing model"
         assert prefix + "default.metallib" in names, "missing Metal library"
-        assert not any("/_CodeSignature/" in n or n.endswith("embedded.mobileprovision") for n in names), "expected unsigned IPA"
-        print(f"Verified unsigned arm64 iOS {info['MinimumOSVersion']} IPA with all three models and Metal kernels")
+        assert not any(
+            "/_CodeSignature/" in n or n.endswith("embedded.mobileprovision")
+            for n in names
+        ), "expected unsigned IPA"
+        print(
+            f"Verified unsigned arm64 iOS {info['MinimumOSVersion']} IPA with all three models and Metal kernels"
+        )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("ipa")
     verify(parser.parse_args().ipa)
-

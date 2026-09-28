@@ -7,9 +7,9 @@ xcodebuild -project Furnace.xcodeproj -scheme Furnace -configuration Release \
   -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/device \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
   CURRENT_PROJECT_VERSION="$build_number" build >build/device-build.log 2>&1 || {
-    tail -n 120 build/device-build.log
-    exit 1
-  }
+  tail -n 120 build/device-build.log
+  exit 1
+}
 mkdir -p build/package/Payload
 ditto build/device/Build/Products/Release-iphoneos/Furnace.app build/package/Payload/Furnace.app
 ditto -c -k --keepParent build/package/Payload dist/Furnace-unsigned.ipa
@@ -22,4 +22,3 @@ ditto -c -k --keepParent build/device/Build/Products/Release-iphoneos/Furnace.ap
   git rev-parse HEAD
   printf 'build=%s\n' "$build_number"
 } >dist/build-info.txt
-
