@@ -28,6 +28,8 @@ jobs:
         with:
           version: '0.8.22'
           enable-cache: true
+      - name: Check formatting (ruff, prettier, shfmt)
+        run: bash scripts/format.sh --check
       - name: Check build scripts
         run: bash -n scripts/build.sh scripts/check_private_ane.sh
       - name: Generate models and validate build tools
