@@ -68,7 +68,7 @@ bash scripts/build.sh
 
 提交前运行 `scripts/format.sh` 就地格式化（Python 用 ruff format，Markdown/YAML/JSON 用 prettier，Shell 用 shfmt；版本固定在脚本内，配置见 `pyproject.toml` 的 `[tool.ruff]`、`.prettierrc.json`、`.editorconfig`，字节须保持不变的文件列在脚本 `EXCLUDE` 与 `.prettierignore`）。`scripts/format.sh --check` 只检查，不一致时非零退出，CI 同样运行它。重排提交登记在 `.git-blame-ignore-revs`，本地运行 `git config blame.ignoreRevsFile .git-blame-ignore-revs` 让 blame 跳过它。
 
-改动只以候选形式进入 `master`：在已 rebase 到 `origin/master` 的干净任务分支上运行 `scripts/candidate.sh`，它把当前提交推成 `candidate/**` 分支并自动运行 **Build tools checks**（`.github/workflows/ci.yml`）：在 Linux 上检查格式，生成三档模型与图标，检查 shell 语法并执行全部 Python / 原生数据构建测试；纯文档候选同样运行。该 SHA 的检查全绿后，`promote.yml` 把 `master` 快进到它，`master` 规则要求每个推入的 SHA 都有通过的 `tools` 检查。Linux 检查成功只表示工具检查通过，不表示 Swift/Metal 编译、模拟器测试或 IPA 验证完成。
+改动只以候选形式进入 `master`：在已 rebase 到 `origin/master` 的干净任务分支上运行全局 `land` 命令，它把当前提交推成 `candidate/**` 分支并自动运行 **Build tools checks**（`.github/workflows/ci.yml`）：在 Linux 上检查格式，生成三档模型与图标，检查 shell 语法并执行全部 Python / 原生数据构建测试；纯文档候选同样运行。该 SHA 的 `ci-ok` 汇总检查通过后，land 把 `master` 快进到它，`master` 规则要求每个推入的 SHA 都有通过的 `ci-ok` 检查。Linux 检查成功只表示工具检查通过，不表示 Swift/Metal 编译、模拟器测试或 IPA 验证完成。
 
 需要交付或验证 Apple 平台改动时，手动运行 **iOS build**。它先复用同一套 Linux 检查，通过后才启动 macOS，完整执行私有 ANE 原生检查、Core ML 计算计划检查、设备构建和模拟器测试。两套工作流各自取消同一分支的旧运行，普通提交的工具检查不会取消手动构建。
 
