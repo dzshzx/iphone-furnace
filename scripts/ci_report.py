@@ -1,5 +1,9 @@
 """Summarize one macOS CI run from Xcode's result bundle and build artifacts."""
 
+# ADR 0048 exemption: ios.yml runs this with the runner's system python3 under
+# `if: always()`, so the report must still render when setup-uv or `uv sync`
+# failed. Keep it stdlib-only and do not route it through uv.
+
 import argparse
 import json
 from pathlib import Path

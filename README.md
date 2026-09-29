@@ -56,9 +56,9 @@ Core ML 后端使用 `.cpuAndNeuralEngine`，识别包含版本前缀的卷积�
 
 ```sh
 uv sync --frozen
-uv run python scripts/generate_models.py
-uv run python scripts/generate_icon.py
-uv run pytest scripts/tests
+uv run --locked python scripts/generate_models.py
+uv run --locked python scripts/generate_icon.py
+uv run --locked pytest scripts/tests
 bash -n scripts/build.sh scripts/check_private_ane.sh
 bash scripts/format.sh --check
 # 以下命令需要 Xcode 27.0 和 XcodeGen 2.46.0：
@@ -82,7 +82,7 @@ bash scripts/build.sh
 - 测试和截图共用显式选定的模拟器 UUID，关闭测试克隆，并在截图前确认启动状态。
 - `actions/upload-artifact` 使用支持单文件上传的固定版本，安装包设置 `archive: false`；诊断文件单独归档。IPA 保留 14 天，诊断产物保留 7 天，过期后可手动触发构建。
 
-模型生成后可运行 `uv run pytest scripts/tests` 验证构建工具；Xcode 的 `Furnace` scheme 包含会话生命周期、七种选择组合、错误回收、报告、原生 CPU、Metal 和模型数值校验，以及模拟器 NPU 不可用测试。完整 Xcode 命令以工作流为准。模拟器与云端 macOS 结果不能证明目标 iPhone 的 GPU/ANE 性能。
+模型生成后可运行 `uv run --locked pytest scripts/tests` 验证构建工具；Xcode 的 `Furnace` scheme 包含会话生命周期、七种选择组合、错误回收、报告、原生 CPU、Metal 和模型数值校验，以及模拟器 NPU 不可用测试。完整 Xcode 命令以工作流为准。模拟器与云端 macOS 结果不能证明目标 iPhone 的 GPU/ANE 性能。
 
 计算计划回归覆盖三档真实编译模型的卷积识别，以及 CPU/GPU/未知分配必须拒绝启动。云端另用 `scripts/check_compute_plan.swift` 检查 macOS 的 CPU-only 与 CPU+ANE 计划，记录原始算子名；宿主是否可用 ANE 不作为 iPhone 验收结论。
 

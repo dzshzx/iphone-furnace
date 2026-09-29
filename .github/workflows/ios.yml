@@ -33,7 +33,7 @@ jobs:
           cat build/private-ane-step.log
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
-          version: '0.8.22'
+          version: '0.12.19'
           enable-cache: true
       - name: Start fixed simulator
         run: |
@@ -55,10 +55,10 @@ jobs:
           mkdir -p build
           started=$SECONDS
           trap 'printf "models\t%d\n" "$((SECONDS-started))" >> build/ci-timings.tsv' EXIT
-          uv sync --frozen >build/models.log 2>&1
-          uv run python scripts/generate_models.py >>build/models.log 2>&1
-          uv run python scripts/generate_icon.py >>build/models.log 2>&1
-          uv run pytest scripts/tests >>build/models.log 2>&1
+          uv sync --locked >build/models.log 2>&1
+          uv run --locked python scripts/generate_models.py >>build/models.log 2>&1
+          uv run --locked python scripts/generate_icon.py >>build/models.log 2>&1
+          uv run --locked pytest scripts/tests >>build/models.log 2>&1
           xcodegen generate >>build/models.log 2>&1
           tail -n 30 build/models.log
       - name: Inspect compiled Core ML plans

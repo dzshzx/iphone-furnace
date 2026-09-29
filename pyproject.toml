@@ -4,6 +4,10 @@ version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = ["coremltools==9.0", "numpy==2.2.6"]
 
+[tool.uv]
+# ADR 0048: project dependencies wait 3 days after release.
+exclude-newer = "3 days"
+
 [dependency-groups]
 dev = ["pytest==9.1.1", "pyyaml==6.0.2"]
 
