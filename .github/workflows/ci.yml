@@ -1,14 +1,11 @@
 name: Build tools checks
 
 on:
-  # Every candidate runs the checks, documentation-only ones included:
-  # promote.yml fast-forwards master only to a SHA with a green run.
+  # Every candidate and pull request runs the checks, documentation-only ones
+  # included: the master ruleset requires ci-ok on the exact SHA.
   push:
     branches: [master, 'candidate/**']
   pull_request:
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
   workflow_call:
 
 permissions:
@@ -38,3 +35,24 @@ jobs:
           uv run --locked python scripts/generate_models.py
           uv run --locked python scripts/generate_icon.py
           uv run --locked pytest scripts/tests
+
+  # The master ruleset requires this one check on every pushed SHA. It runs even
+  # when a needed job fails or is skipped, and succeeds only if every needed job
+  # succeeded, so adding or renaming jobs never touches the ruleset.
+  ci-ok:
+    if: always()
+    needs: [tools]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require every needed job to succeed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          printf '%s\n' "$NEEDS"
+          [ -n "$RESULTS" ] || exit 1
+          for result in $RESULTS; do
+            [ "$result" = success ] || { echo "::error::a needed job concluded $result"; exit 1; }
+          done
