@@ -5,7 +5,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "coremltools==9.0",
     "macholib==1.16.4",
-    "numpy==2.2.6",
+    "numpy==2.5.3",
     "pillow==12.3.0",
 ]
 
@@ -14,7 +14,7 @@ dependencies = [
 exclude-newer = "3 days"
 
 [dependency-groups]
-dev = ["pytest==9.1.1", "pyyaml==6.0.2"]
+dev = ["pytest==9.1.1", "pyyaml==6.0.3"]
 
 
 # ruff format 使用默认风格；版本固定在 scripts/format.sh。
