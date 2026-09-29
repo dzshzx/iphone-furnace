@@ -1,14 +1,15 @@
 import Foundation
+import Synchronization
 @preconcurrency import Metal
 @preconcurrency import MetalPerformanceShaders
 
 final class GPUEngine: LoadEngine, @unchecked Sendable {
     let unit = UnitKind.gpu
     private let workload: GPUWorkload
-    private let state = Locked((stop: true, sample: EngineSnapshot(unit: .gpu), iterations: UInt32(128)))
+    private let state = Mutex((stop: true, sample: EngineSnapshot(unit: .gpu), iterations: UInt32(128)))
     private let group = DispatchGroup()
     private let slotsAvailable = DispatchSemaphore(value: 3)
-    private let freeSlots = Locked([0, 1, 2])
+    private let freeSlots = Mutex([0, 1, 2])
     private var device: MTLDevice!
     private var queue: MTLCommandQueue!
     private var pipeline: MTLComputePipelineState!
@@ -67,20 +68,20 @@ final class GPUEngine: LoadEngine, @unchecked Sendable {
             multiplication = MPSMatrixMultiplication(device: device, transposeLeft: false, transposeRight: false,
                 resultRows: matrixSize, resultColumns: matrixSize, interiorColumns: matrixSize, alpha: 1, beta: 0)
         }
-        state.withValue { $0.sample.detail = "Metal · \(workload.rawValue) · 最多 3 个在途批次" }
+        state.withLock { $0.sample.detail = "Metal · \(workload.rawValue) · 最多 3 个在途批次" }
         try Task.checkCancellation()
     }
 
     func start() {
-        state.withValue { $0.stop = false }
+        state.withLock { $0.stop = false }
         group.enter()
         DispatchQueue.global(qos: .userInitiated).async { [self] in
             defer { group.leave() }
             var serial: UInt32 = 0
-            while !state.withValue({ $0.stop }) {
+            while !state.withLock({ $0.stop }) {
                 guard slotsAvailable.wait(timeout: .now() + 0.1) == .success else { continue }
-                if state.withValue({ $0.stop }) { slotsAvailable.signal(); break }
-                let slot = freeSlots.withValue { $0.removeLast() }
+                if state.withLock({ $0.stop }) { slotsAvailable.signal(); break }
+                let slot = freeSlots.withLock { $0.removeLast() }
                 serial &+= 1
                 autoreleasepool { submit(slot: slot, serial: serial) }
             }
@@ -99,7 +100,7 @@ final class GPUEngine: LoadEngine, @unchecked Sendable {
             guard let encoder = command.makeComputeCommandEncoder() else {
                 fail("无法创建 GPU 计算编码器"); release(slot); return
             }
-            var iterations = state.withValue { $0.iterations }
+            var iterations = state.withLock { $0.iterations }
             var seed = serial
             var useTexture: UInt32 = workload == .mixed ? 1 : 0
             encoder.setComputePipelineState(pipeline)
@@ -127,7 +128,7 @@ final class GPUEngine: LoadEngine, @unchecked Sendable {
                 value = outputs[slot].contents().load(as: Float.self)
             }
             guard value.isFinite, value > 0 else { fail("GPU 输出校验失败"); return }
-            state.withValue {
+            state.withLock {
                 $0.sample.completed += 1
                 $0.sample.lastExecutionMS = ms
                 $0.sample.totalExecutionMS += ms
@@ -143,17 +144,17 @@ final class GPUEngine: LoadEngine, @unchecked Sendable {
     }
 
     private func fail(_ message: String) {
-        state.withValue { $0.sample.error = message; $0.stop = true }
+        state.withLock { $0.sample.error = message; $0.stop = true }
     }
     private func release(_ slot: Int) {
-        freeSlots.withValue { $0.append(slot) }
+        freeSlots.withLock { $0.append(slot) }
         slotsAvailable.signal()
     }
     func stop() async {
-        state.withValue { $0.stop = true }
+        state.withLock { $0.stop = true }
         await withCheckedContinuation { continuation in
             group.notify(queue: .global(qos: .userInitiated)) { continuation.resume() }
         }
     }
-    func sample() -> EngineSnapshot { state.withValue { $0.sample } }
+    func sample() -> EngineSnapshot { state.withLock { $0.sample } }
 }

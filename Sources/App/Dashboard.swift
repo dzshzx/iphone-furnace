@@ -205,8 +205,7 @@ struct Dashboard: View {
         }
     }
     private func duration(_ seconds: Double) -> String {
-        let value = Int(seconds)
-        return String(format: "%02d:%02d:%02d", value / 3600, value / 60 % 60, value % 60)
+        Duration.seconds(Int(seconds)).formatted(.time(pattern: .hourMinuteSecond(padHourToLength: 2)))
     }
     private var battery: String {
         guard let sample = session.samples.last, sample.batteryLevel >= 0 else { return "—" }

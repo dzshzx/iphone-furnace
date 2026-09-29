@@ -1,14 +1,15 @@
 import XCTest
+import Synchronization
 import Metal
 @preconcurrency import CoreML
 @testable import Furnace
 
-private final class FakeEngine: LoadEngine, @unchecked Sendable {
+private final class FakeEngine: LoadEngine, Sendable {
     let unit: UnitKind
     let prepareFailure: Bool
     let runtimeFailure: Bool
     let onPrepare: (@Sendable () async -> Void)?
-    let state = Locked((started: false, stops: 0))
+    let state = Mutex((started: false, stops: 0))
     init(_ unit: UnitKind, prepareFailure: Bool = false, runtimeFailure: Bool = false,
          onPrepare: (@Sendable () async -> Void)? = nil) {
         self.unit = unit; self.prepareFailure = prepareFailure
@@ -18,11 +19,11 @@ private final class FakeEngine: LoadEngine, @unchecked Sendable {
         await onPrepare?()
         if prepareFailure { throw LoadError("backend unavailable") }
     }
-    func start() { state.withValue { $0.started = true } }
-    func stop() async { state.withValue { $0.stops += 1 } }
+    func start() { state.withLock { $0.started = true } }
+    func stop() async { state.withLock { $0.stops += 1 } }
     func sample() -> EngineSnapshot {
-        EngineSnapshot(unit: unit, completed: state.withValue { $0.started ? 10 : 0 },
-            detail: "test double", error: runtimeFailure && state.withValue({ $0.started }) ? "execution failed" : nil)
+        EngineSnapshot(unit: unit, completed: state.withLock { $0.started ? 10 : 0 },
+            detail: "test double", error: runtimeFailure && state.withLock({ $0.started }) ? "execution failed" : nil)
     }
 }
 
@@ -71,11 +72,11 @@ private actor PreparationGate {
             controller.configuration = config
             controller.start()
             try await waitFor { controller.phase == .running }
-            for engine in all { XCTAssertEqual(engine.state.withValue { $0.started }, config.units.contains(engine.unit)) }
+            for engine in all { XCTAssertEqual(engine.state.withLock { $0.started }, config.units.contains(engine.unit)) }
             controller.stop()
             try await waitFor { !controller.phase.busy }
             XCTAssertEqual(controller.phase, .completed)
-            for engine in all { XCTAssertEqual(engine.state.withValue { $0.stops }, config.units.contains(engine.unit) ? 1 : 0) }
+            for engine in all { XCTAssertEqual(engine.state.withLock { $0.stops }, config.units.contains(engine.unit) ? 1 : 0) }
         }
     }
 
@@ -85,9 +86,9 @@ private actor PreparationGate {
         let controller = SessionController(reportRoot: root()) { _ in [cpu, npu] }
         controller.start()
         try await waitFor { controller.phase == .failed }
-        XCTAssertFalse(cpu.state.withValue { $0.started })
-        XCTAssertEqual(cpu.state.withValue { $0.stops }, 1)
-        XCTAssertEqual(npu.state.withValue { $0.stops }, 1)
+        XCTAssertFalse(cpu.state.withLock { $0.started })
+        XCTAssertEqual(cpu.state.withLock { $0.stops }, 1)
+        XCTAssertEqual(npu.state.withLock { $0.stops }, 1)
         XCTAssertTrue(controller.message.contains("backend unavailable"))
     }
 
@@ -100,11 +101,11 @@ private actor PreparationGate {
         XCTAssertEqual(controller.phase, .preparing)
         controller.stop(reason: "background")
         XCTAssertEqual(controller.phase, .stopping)
-        XCTAssertEqual(engine.state.withValue { $0.stops }, 0)
+        XCTAssertEqual(engine.state.withLock { $0.stops }, 0)
         await gate.release()
         try await waitFor { !controller.phase.busy }
-        XCTAssertFalse(engine.state.withValue { $0.started })
-        XCTAssertEqual(engine.state.withValue { $0.stops }, 1)
+        XCTAssertFalse(engine.state.withLock { $0.started })
+        XCTAssertEqual(engine.state.withLock { $0.stops }, 1)
         XCTAssertEqual(controller.phase, .completed)
         XCTAssertEqual(controller.message, "background")
     }
@@ -116,7 +117,7 @@ private actor PreparationGate {
         let controller = SessionController(reportRoot: output) { _ in [cpu, gpu] }
         controller.start()
         try await waitFor { controller.phase == .failed }
-        XCTAssertEqual(cpu.state.withValue { $0.stops }, 1)
+        XCTAssertEqual(cpu.state.withLock { $0.stops }, 1)
         let directory = try XCTUnwrap(FileManager.default.contentsOfDirectory(at: output, includingPropertiesForKeys: nil).first)
         let summary = try JSONSerialization.jsonObject(with: Data(contentsOf: directory.appendingPathComponent("summary.json"))) as? [String: Any]
         XCTAssertEqual(summary?["phase"] as? String, "failed")

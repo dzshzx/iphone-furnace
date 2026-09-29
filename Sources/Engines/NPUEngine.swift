@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 @preconcurrency import CoreML
 
 private final class PredictionWorker: @unchecked Sendable {
@@ -30,7 +31,7 @@ private final class PredictionWorker: @unchecked Sendable {
 final class NPUEngine: LoadEngine, @unchecked Sendable {
     let unit = UnitKind.npu
     private let config: RunConfiguration
-    private let state = Locked((stop: true, sample: EngineSnapshot(unit: .npu)))
+    private let state = Mutex((stop: true, sample: EngineSnapshot(unit: .npu)))
     private let group = DispatchGroup()
     private var workers: [PredictionWorker] = []
     private var privateBridge: FurnaceANE?
@@ -46,10 +47,10 @@ final class NPUEngine: LoadEngine, @unchecked Sendable {
             privateBridge = bridge
             do { try bridge.prepare(channels: config.npuChannels) }
             catch {
-                state.withValue { $0.sample.detail = "私有 ANE · \(bridge.stage)" }
+                state.withLock { $0.sample.detail = "私有 ANE · \(bridge.stage)" }
                 throw error
             }
-            state.withValue { $0.sample.detail = "私有 ANE · 编译/加载/双输入校验通过 · 串行执行" }
+            state.withLock { $0.sample.detail = "私有 ANE · 编译/加载/双输入校验通过 · 串行执行" }
             return
         }
         guard let url = Bundle.main.url(forResource: "Stress\(config.npuChannels)", withExtension: "mlmodelc") else {
@@ -57,12 +58,12 @@ final class NPUEngine: LoadEngine, @unchecked Sendable {
         }
         let configuration = MLModelConfiguration()
         configuration.computeUnits = .cpuAndNeuralEngine
-        state.withValue { $0.sample.detail = "Core ML · 正在读取模型计算计划" }
+        state.withLock { $0.sample.detail = "Core ML · 正在读取模型计算计划" }
         let plan = try await MLComputePlan.load(contentsOf: url, configuration: configuration)
         let inspection = try NPUComputePlan.inspect(plan)
         // Preserve the raw operator names and assignments even if preparation
         // fails before the first telemetry sample is written.
-        state.withValue { $0.sample.detail = inspection.detail }
+        state.withLock { $0.sample.detail = inspection.detail }
         try inspection.requireANE()
         for _ in 0..<config.npuConcurrency {
             try Task.checkCancellation()
@@ -70,21 +71,21 @@ final class NPUEngine: LoadEngine, @unchecked Sendable {
             for serial in 0..<3 { try worker.predict(serial: UInt64(serial)) }
             workers.append(worker)
         }
-        state.withValue {
+        state.withLock {
             $0.sample.detail = "\(inspection.detail) · \(config.npuConcurrency) 路 · 实际执行位置待验证"
         }
         #endif
     }
 
     func start() {
-        state.withValue { $0.stop = false }
+        state.withLock { $0.stop = false }
         let count = config.npuBackend == .experimental ? 1 : workers.count
         for index in 0..<count {
             group.enter()
             DispatchQueue.global(qos: .userInitiated).async { [self] in
                 defer { group.leave() }
                 var serial: UInt64 = 0
-                while !state.withValue({ $0.stop }) {
+                while !state.withLock({ $0.stop }) {
                     autoreleasepool {
                         let start = ProcessInfo.processInfo.systemUptime
                         do {
@@ -94,13 +95,13 @@ final class NPUEngine: LoadEngine, @unchecked Sendable {
                                 try workers[index].predict(serial: serial)
                             }
                             let ms = (ProcessInfo.processInfo.systemUptime - start) * 1000
-                            state.withValue {
+                            state.withLock {
                                 $0.sample.completed += 1
                                 $0.sample.lastExecutionMS = ms
                                 $0.sample.totalExecutionMS += ms
                             }
                         } catch {
-                            state.withValue { $0.stop = true; $0.sample.error = error.localizedDescription }
+                            state.withLock { $0.stop = true; $0.sample.error = error.localizedDescription }
                         }
                     }
                     serial &+= 1
@@ -110,7 +111,7 @@ final class NPUEngine: LoadEngine, @unchecked Sendable {
     }
 
     func stop() async {
-        state.withValue { $0.stop = true }
+        state.withLock { $0.stop = true }
         await withCheckedContinuation { continuation in
             group.notify(queue: .global(qos: .userInitiated)) { continuation.resume() }
         }
@@ -120,5 +121,5 @@ final class NPUEngine: LoadEngine, @unchecked Sendable {
         privateBridge = nil
         workers.removeAll()
     }
-    func sample() -> EngineSnapshot { state.withValue { $0.sample } }
+    func sample() -> EngineSnapshot { state.withLock { $0.sample } }
 }

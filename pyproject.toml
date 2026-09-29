@@ -2,7 +2,12 @@
 name = "furnace-build-tools"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
-dependencies = ["coremltools==9.0", "numpy==2.2.6"]
+dependencies = [
+    "coremltools==9.0",
+    "macholib==1.16.4",
+    "numpy==2.2.6",
+    "pillow==12.3.0",
+]
 
 [tool.uv]
 # ADR 0048: project dependencies wait 3 days after release.

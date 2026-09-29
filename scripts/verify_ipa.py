@@ -3,7 +3,33 @@
 import argparse
 import plistlib
 import struct
+import tempfile
 import zipfile
+
+from macholib.MachO import MachO
+from macholib.mach_o import CPU_TYPE_NAMES, LC_BUILD_VERSION, MH_MAGIC_64
+
+
+def build_platforms(binary):
+    """Return LC_BUILD_VERSION platforms of a thin arm64 Mach-O executable."""
+    with tempfile.NamedTemporaryFile() as handle:
+        handle.write(binary)
+        handle.flush()
+        try:
+            headers = MachO(handle.name).headers
+        except (ValueError, OSError, struct.error) as error:
+            raise AssertionError(f"malformed Mach-O: {error}") from error
+    assert len(headers) == 1, "expected thin arm64 Mach-O"
+    header = headers[0]
+    assert (
+        header.header.magic == MH_MAGIC_64
+        and CPU_TYPE_NAMES.get(header.header.cputype) == "ARM64"
+    ), "expected arm64 Mach-O"
+    return [
+        command.platform
+        for load, command, _ in header.commands
+        if load.cmd == LC_BUILD_VERSION
+    ]
 
 
 def verify(path):
@@ -16,16 +42,7 @@ def verify(path):
         )
         assert info["MinimumOSVersion"] == "27.0", "wrong deployment target"
         binary = archive.read(prefix + info["CFBundleExecutable"])
-        magic, cpu, _, _, count, _, _, _ = struct.unpack_from("<8I", binary)
-        assert magic == 0xFEEDFACF and cpu == 0x0100000C, "expected arm64 Mach-O"
-        offset = 32
-        platforms = []
-        for _ in range(count):
-            command, size = struct.unpack_from("<II", binary, offset)
-            assert size >= 8 and offset + size <= len(binary), "malformed load command"
-            if command == 0x32:
-                platforms.append(struct.unpack_from("<I", binary, offset + 8)[0])
-            offset += size
+        platforms = build_platforms(binary)
         assert platforms == [2], f"expected iOS platform, found {platforms}"
         for channels in (256, 384, 512):
             assert any(

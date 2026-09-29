@@ -66,3 +66,28 @@ def test_generated_graph_retains_runtime_input_and_compute_layers(channels):
     operations = [op.type for block in blocks for op in block.operations]
     assert operations.count("conv") == 16
     assert operations.count("relu") == 16
+
+
+def test_rejects_non_arm64_and_truncated_mach_o(tmp_path):
+    path = tmp_path / "test.ipa"
+    package(path)
+    good = zipfile.ZipFile(path).read("Payload/Furnace.app/Furnace")
+    assert verifier.build_platforms(good) == [2]
+    x86 = struct.pack("<I", 0xFEEDFACF) + struct.pack("<I", 0x01000007) + good[8:]
+    with pytest.raises(AssertionError):
+        verifier.build_platforms(x86)
+    with pytest.raises(AssertionError):
+        verifier.build_platforms(good[:40])
+
+
+def test_icon_matches_committed_pixels():
+    from PIL import Image, ImageChops
+
+    spec = importlib.util.spec_from_file_location(
+        "generate_icon", Path(__file__).parents[1] / "generate_icon.py"
+    )
+    icon = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(icon)
+    root = Path(__file__).parents[2]
+    committed = Image.open(root / icon.OUTPUT).convert("RGB")
+    assert ImageChops.difference(icon.render(), committed).getbbox() is None
