@@ -1,7 +1,7 @@
 name: iOS build
 on:
   # Full Apple-platform validation and IPA delivery are requested together.
-  # Candidate pushes and PRs run ci.yml on Linux.
+  # The requested build includes Linux tools checks before native validation.
   workflow_dispatch:
 permissions:
   contents: read
@@ -10,11 +10,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   checks:
-    # ci.yml's dedupe job declares checks: read; a caller must grant every
-    # permission a nested job requests, even when that job is skipped.
     permissions:
       contents: read
-      checks: read
     uses: ./.github/workflows/ci.yml
   build:
     needs: checks
