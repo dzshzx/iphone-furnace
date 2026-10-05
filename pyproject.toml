@@ -10,8 +10,8 @@ dependencies = [
 ]
 
 [tool.uv]
-# ADR 0048: project dependencies wait 3 days after release.
-exclude-newer = "3 days"
+# ADR 0048: project dependencies wait 1 day after release.
+exclude-newer = "1 day"
 
 [dependency-groups]
 dev = ["pytest==9.1.1", "pyyaml==6.0.3"]
