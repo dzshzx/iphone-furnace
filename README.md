@@ -90,7 +90,7 @@ bash scripts/build.sh
 
 ## 结构与依赖
 
-领域术语见 [CONTEXT.md](CONTEXT.md)。
+领域术语见 [GLOSSARY.md](GLOSSARY.md)。
 
 - `Sources/Core`：会话、协议、遥测和报告。
 - `Sources/Engines`、`Sources/Native`：独立 CPU/Metal/Core ML 引擎与私有桥接。引擎资源仅在准备、运行、清理三个阶段流转；停止完成后才能创建下一次会话。
