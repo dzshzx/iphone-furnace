@@ -5,7 +5,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "coremltools==9.0",
     "macholib==1.16.4",
-    "numpy==2.5.3",
+    "numpy==2.5.4",
     "pillow==12.3.0",
 ]
 
