@@ -1,9 +1,11 @@
 [project]
 name = "furnace-build-tools"
 version = "0.1.0"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.14,<3.15"
 dependencies = [
-    "coremltools==9.0",
+    # 预发布版：coremltools 正式版 9.0 没有 Python 3.14 轮子（上游 apple/coremltools#2646），
+    # 9.1.dev1 有；正式版 9.1 发布后换回正式版。
+    "coremltools==9.1.dev1",
     "macholib==1.16.4",
     "numpy==2.5.4",
     "pillow==13.0.0",
@@ -15,3 +17,6 @@ dev = ["pytest==9.1.1", "pyyaml==6.0.3"]
 
 # ruff format 使用默认风格；版本固定在 scripts/format.sh。
 [tool.ruff]
+# ios.yml 用 runner 自带的 python3 运行 ci_report.py（版本不由本仓固定），
+# 格式化不得写出 3.14 才能解析的语法（如不带括号的 except A, B）。
+per-file-target-version = { "scripts/ci_report.py" = "py312" }
