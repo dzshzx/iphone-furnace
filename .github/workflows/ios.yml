@@ -20,7 +20,7 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check private ANE model construction
         id: private-ane
         run: |
@@ -33,7 +33,7 @@ jobs:
             exit 1
           }
           cat build/private-ane-step.log
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           version: '0.13.4'
           enable-cache: true
@@ -128,7 +128,7 @@ jobs:
           cat dist/validation-report.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload IPA directly
         if: always() && steps.device-build.outcome == 'success' && steps.simulator-tests.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           path: dist/Furnace-unsigned.ipa
           archive: false
@@ -136,7 +136,7 @@ jobs:
           if-no-files-found: error
       - name: Upload diagnostics
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: build-diagnostics-${{ github.run_number }}
           path: |
