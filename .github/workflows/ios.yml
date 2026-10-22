@@ -33,7 +33,7 @@ jobs:
             exit 1
           }
           cat build/private-ane-step.log
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
         with:
           version: '0.13.4'
           enable-cache: true
@@ -128,7 +128,7 @@ jobs:
           cat dist/validation-report.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload IPA directly
         if: always() && steps.device-build.outcome == 'success' && steps.simulator-tests.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           path: dist/Furnace-unsigned.ipa
           archive: false
@@ -136,7 +136,7 @@ jobs:
           if-no-files-found: error
       - name: Upload diagnostics
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-diagnostics-${{ github.run_number }}
           path: |
