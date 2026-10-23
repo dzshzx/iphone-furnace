@@ -219,7 +219,7 @@ def render(root, outcomes, commit, build, versions):
             )
     lines += [
         "",
-        "证据：同次运行的 `build-diagnostics` 包含 build-info、原生检查/计算计划/构建/测试日志、xcresult 原始结果与本报告；IPA 单独上传。",
+        "证据：同次运行的 `build-diagnostics` 包含 build-info、原生检查/计算计划/构建/测试日志、xcresult 原始结果与本报告；IPA 只在升版本号的 master 运行中随 GitHub Release `v<版本号>` 发布。",
         "",
     ]
     return "\n".join(lines) + "\n"

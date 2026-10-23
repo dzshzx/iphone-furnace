@@ -5,10 +5,10 @@
 当前可下载交付为开发构建 `0.1.0 (19)`。2026-10-09（北京时间）对源码提交 `e8f603605fd11904c3ae2f28ab5b4159aebba015` 手动运行 `iOS build`，同一运行先完成 Linux 工具检查，再完成 macOS 构建；2026-10-14 重新下载 IPA 验证。
 
 - [同提交完整 iOS 运行](https://github.com/dzshzx/iphone-furnace/actions/runs/37899722943)：Linux 工具检查（13 项测试）与 macOS 构建均成功
-- [直接下载 build 19 未签名 IPA](https://github.com/dzshzx/iphone-furnace/actions/runs/37899722943/artifacts/11602125769)：保留至 2026-10-23
-- [build 19 诊断产物](https://github.com/dzshzx/iphone-furnace/actions/runs/37899722943/artifacts/11601856721)：报告、日志、xcresult、构建信息与截图，保留至 2026-10-16
+- [Release v0.1.0](https://github.com/dzshzx/iphone-furnace/releases/tag/v0.1.0)：build 19 未签名 IPA 与 `.sha256`；tag 指向上述源码提交，IPA 由 Actions 产物在过期前取回后发布，摘要与原产物一致
+- build 19 诊断产物（报告、日志、xcresult、构建信息与截图）已于 2026-10-16 过期删除
 
-产物过期后需要安装包时，按 [README](../README.md#下载与安装) 对 `master` 重新运行 `iOS build`。build 15（[完整运行](https://github.com/dzshzx/iphone-furnace/actions/runs/35850124766)，提交 `550edff7ff680ca08300da43a472bdcdbbe2236f`）的产物已过期删除，与 build 14 的[完整运行](https://github.com/dzshzx/iphone-furnace/actions/runs/35838168344)（提交 `d16e06544cd996dd76618f18134f88b6c9aba5fe`）一并保留为历史证据。build 15 之后改动 App 源码的提交为 `ab6a88d`（私有 ANE 中断提示只显示一次）与 `64a7d7e`（Swift 改用 Mutex 与 Duration.formatted）。普通提交与手动 iOS 构建的分工见 [README](../README.md#构建)。
+新安装包按 [README](../README.md#构建) 的发版说明随版本号发布为 GitHub Release。build 15（[完整运行](https://github.com/dzshzx/iphone-furnace/actions/runs/35850124766)，提交 `550edff7ff680ca08300da43a472bdcdbbe2236f`）的产物已过期删除，与 build 14 的[完整运行](https://github.com/dzshzx/iphone-furnace/actions/runs/35838168344)（提交 `d16e06544cd996dd76618f18134f88b6c9aba5fe`）一并保留为历史证据。build 15 之后改动 App 源码的提交为 `ab6a88d`（私有 ANE 中断提示只显示一次）与 `64a7d7e`（Swift 改用 Mutex 与 Duration.formatted）。普通提交与手动 iOS 构建的分工见 [README](../README.md#构建)。
 
 build 19 实际工具链为 Xcode 27.0 / build 27A266a、iOS SDK 27.0、macOS 27.0 / 26A428、Python 3.14.7、uv 0.12.24、XcodeGen 2.46.0。macOS 准备、设备构建、模拟器测试分别耗时 198 / 27 / 33 秒。完整计时和阶段状态在诊断产物的 `validation-report.md`。
 构建机上的模拟器计算使用宿主硬件，不作为目标 iPhone 的性能证据。
