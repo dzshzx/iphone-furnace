@@ -1,0 +1,12 @@
+[
+  {
+    "path": "scripts/ci_report.py",
+    "file_name": "ci_report.py",
+    "functions": [
+      {
+        "name": "render",
+        "complexity": 45
+      }
+    ]
+  }
+]
