@@ -1,7 +1,5 @@
 {
   "oversize": {},
   "exclude": [],
-  "complexity": {
-    "scripts/ci_report.py::render": "存量，待整改"
-  }
+  "complexity": {}
 }

@@ -89,22 +89,30 @@ def skip_reason(path, test_name):
     return "xcresult 与测试日志未提供原因；见 tests.xcresult"
 
 
-def render(root, outcomes, commit, build, versions):
-    durations = timings(root / "build/ci-timings.tsv")
+PHASE_LOGS = {
+    "private-ane": ("private-ane-step.log",),
+    "models": ("models.log",),
+    "compute-plan": ("compute-plan-build.log", "compute-plan.log"),
+    "device-build": ("device-build.log",),
+    "simulator-tests": ("simulator-test.log",),
+}
+
+
+def marketing_version(root):
     project = root / "project.yml"
-    match = (
-        re.search(
-            r'^\s*MARKETING_VERSION:\s*["\']?([^"\'\s#]+)',
-            project.read_text(),
-            re.MULTILINE,
-        )
-        if project.exists()
-        else None
+    if not project.exists():
+        return "unknown"
+    match = re.search(
+        r'^\s*MARKETING_VERSION:\s*["\']?([^"\'\s#]+)',
+        project.read_text(),
+        re.MULTILINE,
     )
-    app_version = match.group(1) if match else "unknown"
-    summary = load_json(root / "build/test-summary.json")
-    cases = test_cases(load_json(root / "build/test-cases.json"))
-    lines = [
+    return match.group(1) if match else "unknown"
+
+
+def header_lines(root, commit, build, versions):
+    app_version = marketing_version(root)
+    return [
         "# Furnace macOS 验证报告",
         "",
         f"- 提交：`{clean(commit)}`；build：`{clean(app_version)} ({clean(build)})`",
@@ -114,95 +122,107 @@ def render(root, outcomes, commit, build, versions):
         "- Core ML 实际 ANE 执行：pending（需真机轨迹）。",
         "- 私有 ANE 编译/加载/执行：pending（需真机阶段记录及报告）。",
         "",
-        "| 阶段 | CI 结果 | 耗时 |",
-        "|---|---|---:|",
     ]
+
+
+def seconds_or(seconds, missing):
+    return f"{seconds} s" if seconds is not None else missing
+
+
+def phase_lines(root, outcomes):
+    """Phase table plus the preparation/build/test duration line."""
+    durations = timings(root / "build/ci-timings.tsv")
+    lines = ["| 阶段 | CI 结果 | 耗时 |", "|---|---|---:|"]
     for name, label in PHASES.items():
-        outcome = outcomes[name]
-        duration = f"{durations[name]} s" if name in durations else "未开始"
-        lines.append(f"| {label} | {outcome} | {duration} |")
-    preparation = preparation_seconds(root)
-    prepare_duration = f"{preparation} s" if preparation is not None else "pending"
-    build_duration = (
-        f"{durations['device-build']} s" if "device-build" in durations else "pending"
-    )
-    test_duration = (
-        f"{durations['simulator-tests']} s"
-        if "simulator-tests" in durations
-        else "pending"
-    )
-    lines += [
+        duration = seconds_or(durations.get(name), "未开始")
+        lines.append(f"| {label} | {outcomes[name]} | {duration} |")
+    prepare_duration = seconds_or(preparation_seconds(root), "pending")
+    build_duration = seconds_or(durations.get("device-build"), "pending")
+    test_duration = seconds_or(durations.get("simulator-tests"), "pending")
+    return lines + [
         "",
         f"准备/构建/测试耗时：{prepare_duration} / {build_duration} / {test_duration}",
         "",
     ]
-    if summary:
-        destinations = [
-            item.get("device", {})
-            for item in summary.get("devicesAndConfigurations", [])
-        ]
-        if destinations:
-            device = destinations[0]
-            lines.append(
-                f"模拟器：{clean(device.get('deviceName', '?'))} / iOS {clean(device.get('osVersion', '?'))}。"
-            )
+
+
+def destination_lines(summary):
+    destinations = [
+        item.get("device", {}) for item in summary.get("devicesAndConfigurations", [])
+    ]
+    if not destinations:
+        return []
+    device = destinations[0]
+    return [
+        f"模拟器：{clean(device.get('deviceName', '?'))} / iOS {clean(device.get('osVersion', '?'))}。"
+    ]
+
+
+def failure_lines(summary):
+    lines = [
+        f"- 失败 {clean(failure.get('testIdentifierString', failure.get('testName', '?')))}：{clean(failure.get('failureText', 'xcresult 未提供原因'))}"
+        for failure in summary.get("testFailures", [])
+    ]
+    if summary.get("failedTests", 0) and not summary.get("testFailures"):
         lines.append(
-            "模拟器 XCTest：通过 {passedTests}、失败 {failedTests}、跳过 {skippedTests}；结果 {result}。".format(
-                passedTests=summary.get("passedTests", "?"),
-                failedTests=summary.get("failedTests", "?"),
-                skippedTests=summary.get("skippedTests", "?"),
-                result=summary.get("result", "?"),
-            )
+            "- 失败原因：xcresult 摘要未提供；见 tests.xcresult 和 simulator-test.log。"
         )
-        for failure in summary.get("testFailures", []):
-            lines.append(
-                f"- 失败 {clean(failure.get('testIdentifierString', failure.get('testName', '?')))}：{clean(failure.get('failureText', 'xcresult 未提供原因'))}"
-            )
-        if summary.get("failedTests", 0) and not summary.get("testFailures"):
-            lines.append(
-                "- 失败原因：xcresult 摘要未提供；见 tests.xcresult 和 simulator-test.log。"
-            )
-        skipped = [case for case in cases if case.get("result") == "Skipped"]
-        for case in skipped:
-            details = [
-                child.get("name", "")
-                for child in case.get("children", [])
-                if child.get("nodeType") in ("Failure Message", "Source Code Reference")
-            ]
-            reason = (
-                clean(details[0])
-                if details
-                else skip_reason(
-                    root / "build/simulator-test.log", case.get("name", "")
-                )
-            )
-            lines.append(
-                f"- 跳过 {clean(case.get('nodeIdentifier', case.get('name', '?')))}：{reason}"
-            )
-        if summary.get("skippedTests", 0) and not skipped:
-            lines.append(
-                "- 跳过原因：xcresult 测试树未提供条目；见 tests.xcresult 和 simulator-test.log。"
-            )
-    else:
+    return lines
+
+
+def skipped_case_reason(root, case):
+    details = [
+        child.get("name", "")
+        for child in case.get("children", [])
+        if child.get("nodeType") in ("Failure Message", "Source Code Reference")
+    ]
+    if details:
+        return clean(details[0])
+    return skip_reason(root / "build/simulator-test.log", case.get("name", ""))
+
+
+def skipped_lines(root, summary, cases):
+    skipped = [case for case in cases if case.get("result") == "Skipped"]
+    lines = [
+        f"- 跳过 {clean(case.get('nodeIdentifier', case.get('name', '?')))}：{skipped_case_reason(root, case)}"
+        for case in skipped
+    ]
+    if summary.get("skippedTests", 0) and not skipped:
         lines.append(
+            "- 跳过原因：xcresult 测试树未提供条目；见 tests.xcresult 和 simulator-test.log。"
+        )
+    return lines
+
+
+def simulator_lines(root):
+    summary = load_json(root / "build/test-summary.json")
+    if not summary:
+        return [
             "模拟器 XCTest：无可解析的 xcresult 摘要；见 simulator-test.log 与 tests.xcresult。"
-        )
-    if outcomes["device-build"] == "success":
-        lines.append(
-            "未签名 IPA：`scripts/verify_ipa.py` 已检查 arm64、iOS 平台、三档模型、Metal 内核及无签名。"
-        )
-    logs = {
-        "private-ane": ("private-ane-step.log",),
-        "models": ("models.log",),
-        "compute-plan": ("compute-plan-build.log", "compute-plan.log"),
-        "device-build": ("device-build.log",),
-        "simulator-tests": ("simulator-test.log",),
-    }
+        ]
+    cases = test_cases(load_json(root / "build/test-cases.json"))
+    counts = "模拟器 XCTest：通过 {passedTests}、失败 {failedTests}、跳过 {skippedTests}；结果 {result}。".format(
+        passedTests=summary.get("passedTests", "?"),
+        failedTests=summary.get("failedTests", "?"),
+        skippedTests=summary.get("skippedTests", "?"),
+        result=summary.get("result", "?"),
+    )
+    return (
+        destination_lines(summary)
+        + [counts]
+        + failure_lines(summary)
+        + skipped_lines(root, summary, cases)
+    )
+
+
+def phase_outcome_lines(root, outcomes):
+    """Explain each failed or skipped phase, citing its own log lines when present."""
+    lines = []
     for name, outcome in outcomes.items():
         if outcome == "failure":
             reasons = [
                 reason
-                for filename in logs[name]
+                for filename in PHASE_LOGS[name]
                 for reason in reason_lines(root / "build" / filename)
             ]
             lines.append(
@@ -217,6 +237,18 @@ def render(root, outcomes, commit, build, versions):
             lines.append(
                 f"{PHASES[name]}跳过原因：前置步骤未通过或未启动；见 Actions 步骤状态。"
             )
+    return lines
+
+
+def render(root, outcomes, commit, build, versions):
+    lines = header_lines(root, commit, build, versions)
+    lines += phase_lines(root, outcomes)
+    lines += simulator_lines(root)
+    if outcomes["device-build"] == "success":
+        lines.append(
+            "未签名 IPA：`scripts/verify_ipa.py` 已检查 arm64、iOS 平台、三档模型、Metal 内核及无签名。"
+        )
+    lines += phase_outcome_lines(root, outcomes)
     lines += [
         "",
         "证据：同次运行的 `build-diagnostics` 包含 build-info、原生检查/计算计划/构建/测试日志、xcresult 原始结果与本报告；IPA 只在升版本号的 master 运行中随 GitHub Release `v<版本号>` 发布。",
