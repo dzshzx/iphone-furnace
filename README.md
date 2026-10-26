@@ -68,7 +68,7 @@ bash scripts/build.sh
 
 提交前运行 `scripts/format.sh` 就地格式化（Python 用 ruff format，Markdown/YAML/JSON 用 prettier，Shell 用 shfmt；版本固定在脚本内，配置见 `pyproject.toml` 的 `[tool.ruff]`、`.prettierrc.json`、`.editorconfig`，字节须保持不变的文件列在脚本 `EXCLUDE` 与 `.prettierignore`）。`scripts/format.sh --check` 只检查，不一致时非零退出，CI 同样运行它。重排提交登记在 `.git-blame-ignore-revs`，本地运行 `git config blame.ignoreRevsFile .git-blame-ignore-revs` 让 blame 跳过它。
 
-日常改动完成本地工具检查后用 `land --no-recut` 同步 master；不触发普通提交或 PR 的远端 CI。Renovate PR 经对应门禁验收后人工合入。按需触发 **iOS build** 时，先调用 **Build tools checks**（`.github/workflows/ci.yml`）完成格式、模型/图标生成、shell 语法和 Python/原生数据构建测试，再做 macOS 原生构建、模拟器测试和 IPA 验证。Linux 工具检查本身不代表 Apple 平台或真机验收完成。
+日常改动完成本地工具检查后用 `land -C <任务 worktree> --merge` 合入并同步 master；不触发普通提交或 PR 的远端 CI。Renovate PR 经对应门禁验收后人工合入。按需触发 **iOS build** 时，先调用 **Build tools checks**（`.github/workflows/ci.yml`）完成格式、模型/图标生成、shell 语法和 Python/原生数据构建测试，再做 macOS 原生构建、模拟器测试和 IPA 验证。Linux 工具检查本身不代表 Apple 平台或真机验收完成。
 
 需要交付或验证 Apple 平台改动时，手动运行 **iOS build**。它先复用同一套 Linux 检查，通过后才启动 macOS，完整执行私有 ANE 原生检查、Core ML 计算计划检查、设备构建和模拟器测试。两套工作流各自取消同一分支的旧运行，普通提交的工具检查不会取消手动构建。
 
