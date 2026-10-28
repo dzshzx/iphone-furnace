@@ -10,6 +10,8 @@ jobs:
   tools:
     runs-on: ubuntu-26.04
     timeout-minutes: 5
+    # 以下各步与 scripts/check.sh（合入前门禁）同源，改一处须同步另一处；
+    # check.sh 另检查生成步骤未改动已跟踪文件。
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
