@@ -55,7 +55,7 @@ Core ML 后端使用 `.cpuAndNeuralEngine`，识别包含版本前缀的卷积�
 本地 Linux 使用 `uv` 和 C++20 编译器（`c++`）生成模型、验证 Python 工具与原生数据格式；Swift/Metal 的编译和模拟器验证在 GitHub 的 Apple Silicon `xcode-27` runner 完成。
 
 ```sh
-uv sync --frozen
+uv sync --locked
 uv run --locked python scripts/generate_models.py
 uv run --locked python scripts/generate_icon.py
 uv run --locked pytest scripts/tests
