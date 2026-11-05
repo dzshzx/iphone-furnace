@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Linux 工具检查汇总入口：与 .github/workflows/ci.yml（Build tools checks）各步同源。
+# Linux 工具检查汇总入口：.github/workflows/ci.yml（Build tools checks）直接运行本脚本。
 # 用法：bash scripts/check.sh
 # 生成步骤改写已跟踪的 App 图标；跑完后已跟踪文件须与开始时一致，生成结果漂移即失败（模型输出在 gitignore 的 Models/）。
 # Swift/Metal 编译、模拟器测试、IPA 验证与私有 ANE 原生检查需要 macOS，不在此列，经手动 iOS build 运行。
