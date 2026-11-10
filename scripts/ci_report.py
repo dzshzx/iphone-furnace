@@ -1,6 +1,6 @@
 """Summarize one macOS CI run from Xcode's result bundle and build artifacts."""
 
-# Exception to fleet-state ADR 0053 decision 2 (entries go through uv): ios.yml
+# Exception to the rule that entries go through uv: ios.yml
 # runs this with the runner's system python3 under `if: always()`, so the report
 # must still render when setup-uv or `uv sync` failed. Keep it stdlib-only and do
 # not route it through uv.
