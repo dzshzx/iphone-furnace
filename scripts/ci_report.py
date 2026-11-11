@@ -7,9 +7,8 @@
 
 import argparse
 import json
-from pathlib import Path
 import re
-
+from pathlib import Path
 
 PHASES = {
     "private-ane": "准备：私有 ANE 原生调用与模型构造",

@@ -6,8 +6,8 @@ import struct
 import tempfile
 import zipfile
 
-from macholib.MachO import MachO
 from macholib.mach_o import CPU_TYPE_NAMES, LC_BUILD_VERSION, MH_MAGIC_64
+from macholib.MachO import MachO
 
 
 def build_platforms(binary):

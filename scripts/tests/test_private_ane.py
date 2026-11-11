@@ -1,6 +1,6 @@
-from pathlib import Path
 import struct
 import subprocess
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -32,7 +32,12 @@ def test_real_framework_identifier_is_accepted_without_allowing_paths(native_pro
     # Shape observed from macOS 27 _ANEInMemoryModel.hexStringIdentifier.
     composite = "A" * 64 + "_" + "B" * 64 + "_" + "C" * 64
     for identifier in ["0123456789abcdefABCDEF", composite]:
-        assert subprocess.run([native_probe, "identifier", identifier]).returncode == 0
+        assert (
+            subprocess.run(
+                [native_probe, "identifier", identifier], check=False
+            ).returncode
+            == 0
+        )
     for identifier in [
         "",
         ".",
@@ -50,8 +55,13 @@ def test_real_framework_identifier_is_accepted_without_allowing_paths(native_pro
         "AB_GH",
         "A" * 256,
     ]:
-        assert subprocess.run([native_probe, "identifier", identifier]).returncode == 2
-    assert subprocess.run([native_probe, "embedded-null"]).returncode == 2
+        assert (
+            subprocess.run(
+                [native_probe, "identifier", identifier], check=False
+            ).returncode
+            == 2
+        )
+    assert subprocess.run([native_probe, "embedded-null"], check=False).returncode == 2
 
 
 @pytest.mark.parametrize("channels", [256, 384, 512])

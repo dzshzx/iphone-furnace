@@ -1,8 +1,9 @@
 import importlib.util
-from pathlib import Path
 import plistlib
 import struct
 import zipfile
+from pathlib import Path
+
 import pytest
 from coremltools.models.utils import load_spec
 

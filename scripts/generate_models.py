@@ -1,10 +1,11 @@
 """Generate deterministic, input-dependent FP16 ANE candidates; no downloaded weights."""
 
-from pathlib import Path
 import argparse
 import json
-import numpy as np
+from pathlib import Path
+
 import coremltools as ct
+import numpy as np
 from coremltools.converters.mil import Builder as mb
 from coremltools.converters.mil.mil import types
 
