@@ -68,15 +68,21 @@ private actor PreparationGate {
     func testEveryNonemptySelectionStartsOnlySelectedEngines() async throws {
         for config in RunConfiguration.selfTestSequence().prefix(7) {
             let all = UnitKind.allCases.map { FakeEngine($0) }
-            let controller = SessionController(reportRoot: root()) { config in all.filter { config.units.contains($0.unit) } }
+            let controller = SessionController(reportRoot: root()) { config in
+                all.filter { config.units.contains($0.unit) }
+            }
             controller.configuration = config
             controller.start()
             try await waitFor { controller.phase == .running }
-            for engine in all { XCTAssertEqual(engine.state.withLock { $0.started }, config.units.contains(engine.unit)) }
+            for engine in all {
+                XCTAssertEqual(engine.state.withLock { $0.started }, config.units.contains(engine.unit))
+            }
             controller.stop()
             try await waitFor { !controller.phase.busy }
             XCTAssertEqual(controller.phase, .completed)
-            for engine in all { XCTAssertEqual(engine.state.withLock { $0.stops }, config.units.contains(engine.unit) ? 1 : 0) }
+            for engine in all {
+                XCTAssertEqual(engine.state.withLock { $0.stops }, config.units.contains(engine.unit) ? 1 : 0)
+            }
         }
     }
 
@@ -118,8 +124,10 @@ private actor PreparationGate {
         controller.start()
         try await waitFor { controller.phase == .failed }
         XCTAssertEqual(cpu.state.withLock { $0.stops }, 1)
-        let directory = try XCTUnwrap(FileManager.default.contentsOfDirectory(at: output, includingPropertiesForKeys: nil).first)
-        let summary = try JSONSerialization.jsonObject(with: Data(contentsOf: directory.appendingPathComponent("summary.json"))) as? [String: Any]
+        let directory = try XCTUnwrap(
+            FileManager.default.contentsOfDirectory(at: output, includingPropertiesForKeys: nil).first)
+        let summaryData = try Data(contentsOf: directory.appendingPathComponent("summary.json"))
+        let summary = try JSONSerialization.jsonObject(with: summaryData) as? [String: Any]
         XCTAssertEqual(summary?["phase"] as? String, "failed")
         XCTAssertEqual(summary?["reason"] as? String, "execution failed")
     }
@@ -178,7 +186,8 @@ private actor PreparationGate {
             charging: false, thermalState: "严重", engines: [EngineSnapshot(unit: .npu, detail: "a,\"b\"\nc")])
         try report.append(sample)
         try report.finish(phase: .completed, reason: "test", elapsed: 1, engines: sample.engines)
-        let loaded = try JSONDecoder().decode(TelemetrySample.self, from: Data(contentsOf: report.directory.appendingPathComponent("samples.jsonl")))
+        let lines = try Data(contentsOf: report.directory.appendingPathComponent("samples.jsonl"))
+        let loaded = try JSONDecoder().decode(TelemetrySample.self, from: lines)
         XCTAssertEqual(loaded.engines.first?.detail, "a,\"b\"\nc")
         XCTAssertEqual(ReportStore.csvField("a,\"b\""), "\"a,\"\"b\"\"\"")
         XCTAssertEqual(loaded.thermalState, "严重")
@@ -200,8 +209,12 @@ private actor PreparationGate {
     func testSimulatorDoesNotClaimANEAvailability() async {
         #if targetEnvironment(simulator)
         let engine = NPUEngine(configuration: RunConfiguration())
-        do { try await engine.prepare(); XCTFail("Simulator must not claim ANE execution") }
-        catch { XCTAssertTrue(error.localizedDescription.contains("真实 iPhone")) }
+        do {
+            try await engine.prepare()
+            XCTFail("Simulator must not claim ANE execution")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("真实 iPhone"))
+        }
         await engine.stop()
         #endif
     }
@@ -232,10 +245,12 @@ private actor PreparationGate {
             for value in [Float16(0.25), Float16(0.5)] {
                 let array = try MLMultiArray(shape: [1, 256, 64, 64], dataType: .float16)
                 let buffer = array.dataPointer.bindMemory(to: UInt16.self, capacity: array.count)
-                for i in 0..<array.count { buffer[i] = value.bitPattern }
+                for index in 0..<array.count { buffer[index] = value.bitPattern }
                 let input = try MLDictionaryFeatureProvider(dictionary: ["x": MLFeatureValue(multiArray: array)])
                 let output = try model.prediction(from: input)
-                guard let data = output.featureValue(for: "result")?.multiArrayValue else { throw LoadError("output missing") }
+                guard let data = output.featureValue(for: "result")?.multiArrayValue else {
+                    throw LoadError("output missing")
+                }
                 results.append(data[0].doubleValue)
             }
             return results
