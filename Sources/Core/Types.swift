@@ -95,4 +95,3 @@ protocol LoadEngine: AnyObject, Sendable {
 
 // Every mutable value shared with a worker lives behind a Synchronization.Mutex.
 // No async body may run inside withLock; GPU/Core ML waits must never hold it.
-

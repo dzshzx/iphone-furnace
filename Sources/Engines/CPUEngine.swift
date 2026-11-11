@@ -21,4 +21,3 @@ final class CPUEngine: LoadEngine, @unchecked Sendable {
                        error: furnace_cpu_failed(handle) == 0 ? nil : "CPU 计算校验或线程创建失败")
     }
 }
-

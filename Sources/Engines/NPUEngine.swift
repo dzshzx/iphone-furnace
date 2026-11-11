@@ -10,7 +10,7 @@ private final class PredictionWorker: @unchecked Sendable {
         model = try MLModel(contentsOf: url, configuration: configuration)
         array = try MLMultiArray(shape: [1, NSNumber(value: channels), 64, 64], dataType: .float16)
         let values = array.dataPointer.bindMemory(to: UInt16.self, capacity: array.count)
-        for i in 0..<array.count { values[i] = Float16(0.2 + Float(i % 29) / 100).bitPattern }
+        for index in 0..<array.count { values[index] = Float16(0.2 + Float(index % 29) / 100).bitPattern }
         input = try MLDictionaryFeatureProvider(dictionary: ["x": MLFeatureValue(multiArray: array)])
     }
     func predict(serial: UInt64) throws {
@@ -45,8 +45,9 @@ final class NPUEngine: LoadEngine, @unchecked Sendable {
         if config.npuBackend == .experimental {
             let bridge = FurnaceANE()
             privateBridge = bridge
-            do { try bridge.prepare(channels: config.npuChannels) }
-            catch {
+            do {
+                try bridge.prepare(channels: config.npuChannels)
+            } catch {
                 state.withLock { $0.sample.detail = "私有 ANE · \(bridge.stage)" }
                 throw error
             }
@@ -94,11 +95,11 @@ final class NPUEngine: LoadEngine, @unchecked Sendable {
                             } else {
                                 try workers[index].predict(serial: serial)
                             }
-                            let ms = (ProcessInfo.processInfo.systemUptime - start) * 1000
+                            let executionMS = (ProcessInfo.processInfo.systemUptime - start) * 1000
                             state.withLock {
                                 $0.sample.completed += 1
-                                $0.sample.lastExecutionMS = ms
-                                $0.sample.totalExecutionMS += ms
+                                $0.sample.lastExecutionMS = executionMS
+                                $0.sample.totalExecutionMS += executionMS
                             }
                         } catch {
                             state.withLock { $0.stop = true; $0.sample.error = error.localizedDescription }

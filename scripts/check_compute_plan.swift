@@ -6,8 +6,9 @@ import Foundation
 @main
 struct CheckComputePlan {
     static func main() async {
-        do { try await checkPlans() }
-        catch {
+        do {
+            try await checkPlans()
+        } catch {
             FileHandle.standardError.write(Data("Compute-plan check failed: \(error.localizedDescription)\n".utf8))
             exit(1)
         }
@@ -45,8 +46,9 @@ struct CheckComputePlan {
                     try inspection.requireANE()
                     log("Host plan accepted; actual iPhone execution still requires device evidence")
                 } else {
-                    do { try inspection.requireANE() }
-                    catch {
+                    do {
+                        try inspection.requireANE()
+                    } catch {
                         log("NPU start correctly refused: \(error.localizedDescription)")
                         continue
                     }

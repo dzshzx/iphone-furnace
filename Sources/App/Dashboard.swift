@@ -81,8 +81,11 @@ struct Dashboard: View {
                 ForEach(UnitKind.allCases) { unit in
                     let enabled = session.configuration.units.contains(unit)
                     Button {
-                        if enabled { session.configuration.units.remove(unit) }
-                        else { session.configuration.units.insert(unit) }
+                        if enabled {
+                            session.configuration.units.remove(unit)
+                        } else {
+                            session.configuration.units.insert(unit)
+                        }
                     } label: {
                         VStack(alignment: .leading, spacing: 12) {
                             Text(unit.rawValue).font(.title2.weight(.bold))
@@ -121,7 +124,8 @@ struct Dashboard: View {
                 let snapshot = session.snapshots.first { $0.unit == unit }
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(alignment: .firstTextBaseline) {
-                        Text(unit.rawValue).font(.subheadline.weight(.bold)).foregroundStyle(InstrumentStyle.color(unit))
+                        Text(unit.rawValue).font(.subheadline.weight(.bold))
+                            .foregroundStyle(InstrumentStyle.color(unit))
                         Spacer()
                         Text(rate(unit)).font(.body.monospacedDigit())
                         if unit != .cpu {
@@ -163,8 +167,11 @@ struct Dashboard: View {
                 Text("NPU 后端")
                 Spacer()
                 Button(session.configuration.npuBackend.rawValue) {
-                    if session.configuration.npuBackend == .coreML { showPrivateConfirmation = true }
-                    else { session.configuration.npuBackend = .coreML }
+                    if session.configuration.npuBackend == .coreML {
+                        showPrivateConfirmation = true
+                    } else {
+                        session.configuration.npuBackend = .coreML
+                    }
                 }.fontWeight(.semibold)
             }
             Picker("持续时间", selection: $session.configuration.durationSeconds) {
@@ -215,9 +222,10 @@ struct Dashboard: View {
         guard session.samples.count >= 2 else { return "— 次/秒" }
         let last = session.samples[session.samples.count - 1]
         let previous = session.samples[session.samples.count - 2]
-        guard let a = last.engines.first(where: { $0.unit == unit }),
-              let b = previous.engines.first(where: { $0.unit == unit }) else { return "— 次/秒" }
-        let perSecond = Double(a.completed - min(a.completed, b.completed)) / max(0.001, last.elapsed - previous.elapsed)
+        guard let current = last.engines.first(where: { $0.unit == unit }),
+              let prior = previous.engines.first(where: { $0.unit == unit }) else { return "— 次/秒" }
+        let perSecond = Double(current.completed - min(current.completed, prior.completed))
+            / max(0.001, last.elapsed - previous.elapsed)
         return String(format: "%.1f 次/秒", perSecond)
     }
 }

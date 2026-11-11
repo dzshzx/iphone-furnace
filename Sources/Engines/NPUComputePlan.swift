@@ -19,7 +19,8 @@ enum NPUComputePlan {
             operatorCounts.keys.sorted().map { "\($0)=\(operatorCounts[$0]!)" }.joined(separator: ", ")
         }
         var detail: String {
-            "Core ML · 预计 ANE \(aneCount)/\(convolutionCount) 卷积 · CPU \(cpuCount) / GPU \(gpuCount) / 未知 \(unknownCount) · 算子：\(operatorSummary)"
+            "Core ML · 预计 ANE \(aneCount)/\(convolutionCount) 卷积 · "
+                + "CPU \(cpuCount) / GPU \(gpuCount) / 未知 \(unknownCount) · 算子：\(operatorSummary)"
         }
 
         func requireANE() throws {
@@ -27,7 +28,8 @@ enum NPUComputePlan {
                 throw LoadError("无法识别计算计划中的卷积，尚未确认 ANE 分配（算子：\(operatorSummary)）")
             }
             guard aneCount == convolutionCount else {
-                throw LoadError("模型卷积未全部预计分配到 ANE（\(aneCount)/\(convolutionCount)；CPU \(cpuCount) / GPU \(gpuCount) / 未知 \(unknownCount)）；不将 CPU 回退计作 NPU 压测")
+                throw LoadError("模型卷积未全部预计分配到 ANE（\(aneCount)/\(convolutionCount)；"
+                    + "CPU \(cpuCount) / GPU \(gpuCount) / 未知 \(unknownCount)）；不将 CPU 回退计作 NPU 压测")
             }
         }
     }

@@ -116,8 +116,11 @@ import os
             UIDevice.current.isBatteryMonitoringEnabled = savedBatteryMonitoring
             let finalPhase: SessionPhase = failure == nil ? .completed : .failed
             let finalReason = failure ?? stopReason
-            do { try report?.finish(phase: finalPhase, reason: finalReason, elapsed: elapsed, engines: snapshots) }
-            catch { failure = "报告保存失败：\(error.localizedDescription)" }
+            do {
+                try report?.finish(phase: finalPhase, reason: finalReason, elapsed: elapsed, engines: snapshots)
+            } catch {
+                failure = "报告保存失败：\(error.localizedDescription)"
+            }
             report = nil
             engines.removeAll()
             phase = failure == nil ? .completed : .failed

@@ -10,7 +10,8 @@ import SwiftUI
                 .onChange(of: scenePhase) { _, value in
                     if value == .background { session.stop(reason: "应用进入后台或锁屏") }
                 }
-                .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
+                .onReceive(NotificationCenter.default
+                    .publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
                     session.stop(reason: "系统内存压力，结束会话")
                 }
         }

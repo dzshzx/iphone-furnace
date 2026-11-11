@@ -33,12 +33,14 @@ final class GPUEngine: LoadEngine, @unchecked Sendable {
         self.queue = queue
         pipeline = try await device.makeComputePipelineState(function: function)
         for _ in 0..<3 {
-            guard let buffer = device.makeBuffer(length: count * MemoryLayout<Float>.stride, options: .storageModeShared) else {
+            guard let buffer = device.makeBuffer(length: count * MemoryLayout<Float>.stride,
+                                                 options: .storageModeShared) else {
                 throw LoadError("GPU 输出缓冲区分配失败")
             }
             outputs.append(buffer)
         }
-        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: 256, height: 256, mipmapped: false)
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: 256, height: 256,
+                                                                  mipmapped: false)
         descriptor.usage = .shaderRead
         descriptor.storageMode = .shared
         guard let texture = device.makeTexture(descriptor: descriptor) else { throw LoadError("纹理分配失败") }
@@ -52,17 +54,18 @@ final class GPUEngine: LoadEngine, @unchecked Sendable {
             let matrixDescriptor = MPSMatrixDescriptor(rows: matrixSize, columns: matrixSize,
                                                        rowBytes: matrixSize * 2, dataType: .float16)
             func matrix() throws -> MPSMatrix {
-                guard let buffer = device.makeBuffer(length: matrixSize * matrixSize * 2, options: .storageModeShared) else {
+                guard let buffer = device.makeBuffer(length: matrixSize * matrixSize * 2,
+                                                     options: .storageModeShared) else {
                     throw LoadError("矩阵缓冲区分配失败")
                 }
                 return MPSMatrix(buffer: buffer, descriptor: matrixDescriptor)
             }
             left = try matrix(); right = try matrix()
-            let a = left.data.contents().bindMemory(to: UInt16.self, capacity: matrixSize * matrixSize)
-            let b = right.data.contents().bindMemory(to: UInt16.self, capacity: matrixSize * matrixSize)
-            for i in 0..<(matrixSize * matrixSize) {
-                a[i] = Float16(Float(i % 7 + 1) / 256).bitPattern
-                b[i] = Float16(Float(i % 11 + 1) / 256).bitPattern
+            let leftValues = left.data.contents().bindMemory(to: UInt16.self, capacity: matrixSize * matrixSize)
+            let rightValues = right.data.contents().bindMemory(to: UInt16.self, capacity: matrixSize * matrixSize)
+            for index in 0..<(matrixSize * matrixSize) {
+                leftValues[index] = Float16(Float(index % 7 + 1) / 256).bitPattern
+                rightValues[index] = Float16(Float(index % 11 + 1) / 256).bitPattern
             }
             matrices = try (0..<3).map { _ in try matrix() }
             multiplication = MPSMatrixMultiplication(device: device, transposeLeft: false, transposeRight: false,
@@ -95,7 +98,8 @@ final class GPUEngine: LoadEngine, @unchecked Sendable {
         command.label = "Furnace batch \(serial)"
         let matrixPass = workload == .matrix || (workload == .mixed && serial % 3 == 0)
         if matrixPass {
-            multiplication.encode(commandBuffer: command, leftMatrix: left, rightMatrix: right, resultMatrix: matrices[slot])
+            multiplication.encode(commandBuffer: command, leftMatrix: left, rightMatrix: right,
+                                  resultMatrix: matrices[slot])
         } else {
             guard let encoder = command.makeComputeCommandEncoder() else {
                 fail("无法创建 GPU 计算编码器"); release(slot); return
@@ -120,27 +124,34 @@ final class GPUEngine: LoadEngine, @unchecked Sendable {
             guard buffer.status == .completed else {
                 fail(buffer.error?.localizedDescription ?? "GPU 执行失败"); return
             }
-            let ms = max(0, (buffer.gpuEndTime - buffer.gpuStartTime) * 1000)
-            let value: Float
-            if matrixPass {
-                value = Float(Float16(bitPattern: matrices[slot].data.contents().load(as: UInt16.self)))
-            } else {
-                value = outputs[slot].contents().load(as: Float.self)
-            }
-            guard value.isFinite, value > 0 else { fail("GPU 输出校验失败"); return }
-            state.withLock {
-                $0.sample.completed += 1
-                $0.sample.lastExecutionMS = ms
-                $0.sample.totalExecutionMS += ms
-                if !matrixPass && ms > 0 {
-                    // Bound individual kernels, not overall duty cycle. Keep
-                    // submitting continuously even when thermalState rises.
-                    if ms > 35 { $0.iterations = max(16, $0.iterations / 2) }
-                    else if ms < 8 { $0.iterations = min(2048, $0.iterations * 2) }
+            recordCompletion(buffer, slot: slot, matrixPass: matrixPass)
+        }
+        command.commit()
+    }
+
+    private func recordCompletion(_ buffer: MTLCommandBuffer, slot: Int, matrixPass: Bool) {
+        let executionMS = max(0, (buffer.gpuEndTime - buffer.gpuStartTime) * 1000)
+        let value: Float
+        if matrixPass {
+            value = Float(Float16(bitPattern: matrices[slot].data.contents().load(as: UInt16.self)))
+        } else {
+            value = outputs[slot].contents().load(as: Float.self)
+        }
+        guard value.isFinite, value > 0 else { fail("GPU 输出校验失败"); return }
+        state.withLock {
+            $0.sample.completed += 1
+            $0.sample.lastExecutionMS = executionMS
+            $0.sample.totalExecutionMS += executionMS
+            if !matrixPass && executionMS > 0 {
+                // Bound individual kernels, not overall duty cycle. Keep
+                // submitting continuously even when thermalState rises.
+                if executionMS > 35 {
+                    $0.iterations = max(16, $0.iterations / 2)
+                } else if executionMS < 8 {
+                    $0.iterations = min(2048, $0.iterations * 2)
                 }
             }
         }
-        command.commit()
     }
 
     private func fail(_ message: String) {
