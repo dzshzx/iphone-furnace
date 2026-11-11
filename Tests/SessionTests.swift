@@ -9,13 +9,14 @@ private final class FakeEngine: LoadEngine, Sendable {
     let prepareFailure: Bool
     let runtimeFailure: Bool
     let onPrepare: (@Sendable () async -> Void)?
-    let state = Mutex((started: false, stops: 0))
+    let state = Mutex((started: false, stops: 0, prepares: 0))
     init(_ unit: UnitKind, prepareFailure: Bool = false, runtimeFailure: Bool = false,
          onPrepare: (@Sendable () async -> Void)? = nil) {
         self.unit = unit; self.prepareFailure = prepareFailure
         self.runtimeFailure = runtimeFailure; self.onPrepare = onPrepare
     }
     func prepare() async throws {
+        state.withLock { $0.prepares += 1 }
         await onPrepare?()
         if prepareFailure { throw LoadError("backend unavailable") }
     }
@@ -55,16 +56,18 @@ private actor PreparationGate {
     }
 }
 
-@MainActor final class SessionTests: XCTestCase {
-    private func root() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString) }
-    private func waitFor(_ condition: () -> Bool, timeout: Int = 300) async throws {
-        for _ in 0..<timeout {
-            if condition() { return }
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        XCTFail("Timed out waiting for lifecycle transition")
-    }
+private func root() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString) }
 
+/// Polls every 10 ms, so `timeout` counts polls rather than seconds.
+@MainActor private func waitFor(timeout: Int = 300, _ condition: () -> Bool) async throws {
+    for _ in 0..<timeout {
+        if condition() { return }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    XCTFail("Timed out waiting for lifecycle transition")
+}
+
+@MainActor final class SessionTests: XCTestCase {
     func testEveryNonemptySelectionStartsOnlySelectedEngines() async throws {
         for config in RunConfiguration.selfTestSequence().prefix(7) {
             let all = UnitKind.allCases.map { FakeEngine($0) }
@@ -191,6 +194,10 @@ private actor PreparationGate {
         XCTAssertEqual(loaded.engines.first?.detail, "a,\"b\"\nc")
         XCTAssertEqual(ReportStore.csvField("a,\"b\""), "\"a,\"\"b\"\"\"")
         XCTAssertEqual(loaded.thermalState, "严重")
+        let metadataData = try Data(contentsOf: report.directory.appendingPathComponent("metadata.json"))
+        let metadata = try XCTUnwrap(JSONSerialization.jsonObject(with: metadataData) as? [String: Any])
+        XCTAssertEqual(Set(metadata.keys), ["appVersion", "build", "configuration", "createdAt", "device",
+                                            "id", "measurementNotes", "os", "processors", "schemaVersion"])
     }
 
     func testNativeCPUProducesFiniteWorkAndStops() async throws {
@@ -257,5 +264,99 @@ private actor PreparationGate {
         }.value
         XCTAssertTrue(results.allSatisfy { $0.isFinite && $0 > 0 })
         XCTAssertEqual(results[1] / results[0], 2, accuracy: 0.03)
+    }
+}
+
+// Paths through SessionController.start that the lifecycle tests above do not reach.
+@MainActor final class SessionStartPathTests: XCTestCase {
+    func testStartWhileBusyIsIgnored() async throws {
+        let engine = FakeEngine(.cpu)
+        let controller = SessionController(reportRoot: root()) { _ in [engine] }
+        controller.start()
+        try await waitFor { controller.phase == .running }
+        controller.start()
+        XCTAssertEqual(controller.phase, .running)
+        controller.stop()
+        try await waitFor { !controller.phase.busy }
+        XCTAssertEqual(controller.phase, .completed)
+        XCTAssertEqual(engine.state.withLock { $0.prepares }, 1)
+        XCTAssertEqual(engine.state.withLock { $0.stops }, 1)
+    }
+
+    func testReportCreationFailureFailsBeforePreparingEngines() async throws {
+        // A regular file where the report directory should go makes ReportStore throw.
+        let blocked = root()
+        try Data().write(to: blocked)
+        let engine = FakeEngine(.cpu)
+        let controller = SessionController(reportRoot: blocked) { _ in [engine] }
+        controller.start()
+        try await waitFor { !controller.phase.busy }
+        XCTAssertEqual(controller.phase, .failed)
+        XCTAssertNotEqual(controller.message, "手动停止")
+        XCTAssertEqual(engine.state.withLock { $0.prepares }, 0)
+        XCTAssertFalse(engine.state.withLock { $0.started })
+        XCTAssertEqual(engine.state.withLock { $0.stops }, 1)
+    }
+
+    func testStopDuringFirstPreparationSkipsLaterEngines() async throws {
+        let gate = PreparationGate()
+        let first = FakeEngine(.cpu, onPrepare: { await gate.prepare() })
+        let second = FakeEngine(.gpu)
+        let controller = SessionController(reportRoot: root()) { _ in [first, second] }
+        controller.start()
+        await gate.waitUntilEntered()
+        controller.stop(reason: "background")
+        await gate.release()
+        try await waitFor { !controller.phase.busy }
+        XCTAssertEqual(second.state.withLock { $0.prepares }, 0)
+        XCTAssertFalse(first.state.withLock { $0.started })
+        XCTAssertEqual(first.state.withLock { $0.stops }, 1)
+        XCTAssertEqual(second.state.withLock { $0.stops }, 1)
+        XCTAssertEqual(controller.phase, .completed)
+        XCTAssertEqual(controller.message, "background")
+    }
+
+    func testEngineErrorFoundAtStopFailsSession() async throws {
+        let engine = FakeEngine(.gpu, runtimeFailure: true)
+        let controller = SessionController(reportRoot: root()) { _ in [engine] }
+        controller.start()
+        try await waitFor { controller.phase == .running }
+        // Stop before the first one-second sample, so only the final snapshot carries the error.
+        controller.stop()
+        try await waitFor { !controller.phase.busy }
+        XCTAssertEqual(controller.phase, .failed)
+        XCTAssertEqual(controller.message, "execution failed")
+    }
+
+    func testReportSaveFailureFailsSession() async throws {
+        let output = root()
+        let controller = SessionController(reportRoot: output) { _ in [FakeEngine(.cpu)] }
+        controller.start()
+        try await waitFor { controller.phase == .running }
+        // Open sample files stay writable; the summary written at the end has no directory left.
+        try FileManager.default.removeItem(at: output)
+        controller.stop()
+        try await waitFor { !controller.phase.busy }
+        XCTAssertEqual(controller.phase, .failed)
+        XCTAssertTrue(controller.message.hasPrefix("报告保存失败："), controller.message)
+    }
+
+    func testTimedSuiteRunContinuesWithNextConfiguration() async throws {
+        let output = root()
+        let controller = SessionController(reportRoot: output) { _ in [FakeEngine(.npu)] }
+        let original = controller.configuration
+        controller.startNPUComparison()
+        XCTAssertEqual(controller.suiteProgress, "自测 1/3")
+        // Each comparison step is timed at 30 seconds.
+        try await waitFor(timeout: 4_500) { controller.suiteProgress == "自测 2/3" }
+        XCTAssertTrue(controller.phase.busy)
+        XCTAssertEqual(controller.configuration.npuConcurrency, 2)
+        controller.stop()
+        try await waitFor { !controller.phase.busy }
+        XCTAssertEqual(controller.phase, .completed)
+        XCTAssertEqual(controller.configuration, original)
+        XCTAssertNil(controller.suiteProgress)
+        let runs = try FileManager.default.contentsOfDirectory(at: output, includingPropertiesForKeys: nil)
+        XCTAssertEqual(runs.count, 2)
     }
 }
