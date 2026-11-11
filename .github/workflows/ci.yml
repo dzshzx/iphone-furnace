@@ -10,8 +10,9 @@ jobs:
   tools:
     runs-on: ubuntu-26.04
     timeout-minutes: 5
-    # 合入前门禁 scripts/check.sh 是唯一来源：格式、shell 语法、uv sync --locked、
-    # 模型与图标生成、pytest，并要求生成后已跟踪文件不变。
+    # 合入前门禁 scripts/check.sh 是唯一来源：格式、ruff check、shellcheck、SwiftLint、
+    # Python 与 Swift 函数复杂度、代码文件行数、uv sync --locked、模型与图标生成、pytest，
+    # 并要求生成后已跟踪文件不变。
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3

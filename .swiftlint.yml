@@ -1,0 +1,7 @@
+# SwiftLint 用默认规则集，由 scripts/format.sh --lint 以 --strict 运行（警告也算失败）。
+# 下面关掉的规则与门禁的其他步骤重复，以那边的线为准。
+disabled_rules:
+  # 函数圈复杂度上限 15 由 scripts/format.sh --lint 的 lizard 步骤检查（MAX_COMPLEXITY）。
+  - cyclomatic_complexity
+  # 单个代码文件 2000 行上限由 scripts/format.sh --lint 的行数步骤检查（MAX_LINES）。
+  - file_length
