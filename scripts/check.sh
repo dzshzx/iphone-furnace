@@ -10,7 +10,7 @@ tracked_state() { git status --porcelain --untracked-files=no && git diff HEAD |
 before=$(tracked_state)
 
 bash scripts/format.sh --check
-bash -n scripts/build.sh scripts/check_private_ane.sh
+bash scripts/format.sh --lint
 uv sync --locked
 uv run --locked python scripts/generate_models.py
 uv run --locked python scripts/generate_icon.py

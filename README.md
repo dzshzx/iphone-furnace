@@ -59,16 +59,16 @@ uv sync --locked
 uv run --locked python scripts/generate_models.py
 uv run --locked python scripts/generate_icon.py
 uv run --locked pytest scripts/tests
-bash -n scripts/build.sh scripts/check_private_ane.sh
 bash scripts/format.sh --check
+bash scripts/format.sh --lint
 # 以下命令需要 Xcode 27.0 和 XcodeGen 2.46.0：
 xcodegen generate
 bash scripts/build.sh
 ```
 
-提交前运行 `scripts/format.sh` 就地格式化（Python 用 ruff format，Markdown/YAML/JSON 用 prettier，Shell 用 shfmt；版本固定在脚本内，配置见 `pyproject.toml` 的 `[tool.ruff]`、`.prettierrc.json`、`.editorconfig`，字节须保持不变的文件列在脚本 `EXCLUDE` 与 `.prettierignore`）。`scripts/format.sh --check` 只检查，不一致时非零退出，CI 同样运行它。重排提交登记在 `.git-blame-ignore-revs`，本地运行 `git config blame.ignoreRevsFile .git-blame-ignore-revs` 让 blame 跳过它。
+提交前运行 `scripts/format.sh` 就地格式化（Python 用 ruff format，Markdown/YAML/JSON 用 prettier，Shell 用 shfmt；版本固定在脚本内，配置见 `pyproject.toml` 的 `[tool.ruff]`、`.prettierrc.json`、`.editorconfig`，字节须保持不变的文件列在脚本 `EXCLUDE` 与 `.prettierignore`）。`scripts/format.sh --check` 只检查格式；`scripts/format.sh --lint` 跑 ruff check、Python 函数圈复杂度上限（15）、shellcheck 与代码文件行数上限（2000 行）；两者有问题时非零退出，CI 同样运行它们。重排提交登记在 `.git-blame-ignore-revs`，本地运行 `git config blame.ignoreRevsFile .git-blame-ignore-revs` 让 blame 跳过它。
 
-Linux 工具检查的汇总入口是 `bash scripts/check.sh`（格式、shell 语法、`uv sync --locked`、模型与图标生成、pytest，并要求生成后已跟踪文件不变），**Build tools checks** 直接运行它。日常改动用 `wt -C <任务 worktree> land` 合入，它先在任务 worktree 跑 `bash scripts/check.sh`，通过后合入并推送；不触发普通提交或 PR 的远端 CI。依赖升级由 agent 每周批量执行。按需触发 **iOS build** 时，先调用 **Build tools checks**（`.github/workflows/ci.yml`）完成格式、模型/图标生成、shell 语法和 Python/原生数据构建测试，再做 macOS 原生构建、模拟器测试和 IPA 验证。Linux 工具检查本身不代表 Apple 平台或真机验收完成。
+Linux 工具检查的汇总入口是 `bash scripts/check.sh`（格式、ruff check 与 shellcheck 等检查、`uv sync --locked`、模型与图标生成、pytest，并要求生成后已跟踪文件不变），**Build tools checks** 直接运行它。日常改动用 `wt -C <任务 worktree> land` 合入，它先在任务 worktree 跑 `bash scripts/check.sh`，通过后合入并推送；不触发普通提交或 PR 的远端 CI。依赖升级由 agent 每周批量执行。按需触发 **iOS build** 时，先调用 **Build tools checks**（`.github/workflows/ci.yml`）完成格式与检查、模型/图标生成和 Python/原生数据构建测试，再做 macOS 原生构建、模拟器测试和 IPA 验证。Linux 工具检查本身不代表 Apple 平台或真机验收完成。
 
 需要交付或验证 Apple 平台改动时，手动运行 **iOS build**。它先复用同一套 Linux 检查，通过后才启动 macOS，完整执行私有 ANE 原生检查、Core ML 计算计划检查、设备构建和模拟器测试。两套工作流各自取消同一分支的旧运行，普通提交的工具检查不会取消手动构建。
 

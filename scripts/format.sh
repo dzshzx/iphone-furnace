@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# 统一格式化入口：Python 用 ruff format，JS/TS 与 Markdown/YAML/JSON 用 prettier，Shell 用 shfmt。
-# 用法：scripts/format.sh [--check]
-#   无参数：就地格式化本仓跟踪的文件与未被忽略的新文件；--check：只检查，不一致时列出文件并非零退出（CI 用）。
+# 统一格式化与检查入口：Python 用 ruff，JS/TS 与 Markdown/YAML/JSON 用 prettier，Shell 用 shfmt 与 shellcheck。
+# 用法：scripts/format.sh [--check | --lint]
+#   无参数：就地格式化本仓跟踪的文件与未被忽略的新文件；--check：只检查格式，不一致时列出文件并非零退出；
+#   --lint：跑 ruff check、Python 函数复杂度上限、shellcheck，并检查代码文件不超过 MAX_LINES 行，有问题时非零退出。
 # 工具版本只在下方常量固定；各工具配置：pyproject.toml 的 [tool.ruff]、.prettierrc.json/.prettierignore、.editorconfig（shfmt）。
 set -euo pipefail
 
@@ -10,6 +11,12 @@ PRETTIER_VERSION=3.9.10
 SHFMT_VERSION=3.14.1
 # shfmt 经 PyPI 包 shfmt-py 分发，该版本内置上面的 shfmt。
 SHFMT_PY_VERSION=4.2.0
+SHELLCHECK_VERSION=0.11.0
+# PyPI 包 shellcheck-py 分发 shellcheck，该版本内置上面的 shellcheck。
+SHELLCHECK_PY_VERSION=0.11.0.1
+# 单个 Python 函数的圈复杂度上限与单个代码文件的行数上限。
+MAX_COMPLEXITY=15
+MAX_LINES=2000
 # 字节须保持不变的文件（git pathspec），各语言共用；与 .prettierignore 同步维护。
 EXCLUDE=(
   ':(exclude)**/node_modules/**' ':(exclude)**/vendor/**' ':(exclude)**/dist/**'
@@ -18,11 +25,13 @@ EXCLUDE=(
 )
 
 CHECK=0
+LINT=0
 case "${1:-}" in
   "") ;;
   --check) CHECK=1 ;;
+  --lint) LINT=1 ;;
   -h | --help)
-    sed -n '2,5p' "$0"
+    sed -n '2,6p' "$0"
     exit 0
     ;;
   *)
@@ -67,6 +76,24 @@ shfmt() {
   fi
 }
 
+shellcheck() {
+  # 取法同 shfmt：本机已装同版本则直接用；否则经 uvx/pipx 取 shellcheck-py。
+  local have
+  have=$(command shellcheck --version 2>/dev/null | awk '$1 == "version:" { print $2 }' || true)
+  if [ "$have" = "$SHELLCHECK_VERSION" ]; then
+    command shellcheck "$@"
+  elif command -v uvx >/dev/null 2>&1; then
+    uvx -q --from "shellcheck-py==$SHELLCHECK_PY_VERSION" shellcheck "$@"
+  else
+    pipx run --spec "shellcheck-py==$SHELLCHECK_PY_VERSION" shellcheck "$@"
+  fi
+}
+
+max_lines() {
+  # 列出行数超过 MAX_LINES 的文件并非零退出。末尾加 /dev/null 保证 wc 总会多打一行合计，sed 把这一行去掉。
+  wc -l -- "$@" /dev/null | sed '$d' | awk -v max="$MAX_LINES" '$1 > max { print; bad = 1 } END { exit bad }'
+}
+
 mapfile -d '' PY < <(files '*.py' '*.pyi')
 # 进程替换的退出码不会自动传出：每个 < <(...) 之后 wait "$!" 取回，git ls-files 失败时随 set -e 退出。
 wait "$!"
@@ -74,6 +101,29 @@ mapfile -d '' JS < <(files '*.js' '*.mjs' '*.cjs' '*.jsx' '*.ts' '*.mts' '*.cts'
 wait "$!"
 mapfile -d '' SH < <(files '*.sh' '*.bash')
 wait "$!"
+
+if [ "$LINT" -eq 1 ]; then
+  # 每一步直接调用工具并原样透出它的输出，非零即随 set -e 退出。
+  mapfile -d '' CODE < <(files '*.py' '*.pyi' '*.sh' '*.bash' '*.swift' '*.metal' '*.h' '*.mm' '*.m' '*.cpp' \
+    '*.js' '*.mjs' '*.cjs' '*.jsx' '*.ts' '*.mts' '*.cts' '*.tsx')
+  wait "$!"
+  if [ ${#PY[@]} -gt 0 ]; then
+    echo "== ruff check"
+    ruff check --output-format concise -- "${PY[@]}"
+    # 复杂度不认行内的 noqa，要放宽只能改这里或 pyproject.toml。
+    echo "== Python 函数圈复杂度不超过 $MAX_COMPLEXITY"
+    ruff check --select C901 --ignore-noqa --config "lint.mccabe.max-complexity=$MAX_COMPLEXITY" \
+      --output-format concise -- "${PY[@]}"
+  fi
+  if [ ${#SH[@]} -gt 0 ]; then
+    echo "== shellcheck"
+    shellcheck -- "${SH[@]}"
+  fi
+  echo "== 代码文件不超过 $MAX_LINES 行"
+  max_lines "${CODE[@]}"
+  echo "lint: ok"
+  exit 0
+fi
 
 FAIL=0
 if [ ${#PY[@]} -gt 0 ]; then
