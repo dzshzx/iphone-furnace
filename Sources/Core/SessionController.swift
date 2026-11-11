@@ -72,72 +72,83 @@ import os
         runTask = Task { [self] in
             var failure: String?
             do {
-                report = try ReportStore(configuration: config, root: reportRoot)
-                for engine in engines {
-                    try Task.checkCancellation()
-                    message = "准备 \(engine.unit.rawValue)"
-                    try await engine.prepare()
-                    snapshots = engines.map { $0.sample() }
-                }
-                try Task.checkCancellation()
-                startedAt = ProcessInfo.processInfo.systemUptime
-                lastSampleTime = startedAt
-                lastCPUSeconds = furnace_process_cpu_seconds()
-                interval = signposter.beginInterval("FurnaceSession")
-                for engine in engines { engine.start() }
-                phase = .running
-                message = "持续提交负载 · 温度变化只记录"
-                while !Task.isCancelled {
-                    try await Task.sleep(for: .seconds(1))
-                    try capture()
-                    if let error = snapshots.compactMap(\.error).first { throw LoadError(error) }
-                    if config.durationSeconds > 0 && elapsed >= Double(config.durationSeconds) {
-                        stopReason = "定时结束"; break
-                    }
-                }
+                try await runSession(config)
             } catch is CancellationError {
                 // Explicit stop/background interrupts do not turn a run into a failure.
             } catch {
                 failure = error.localizedDescription
             }
-            phase = .stopping
-            message = "停止提交并等待在途计算结束"
-            await withTaskGroup(of: Void.self) { group in
-                for engine in engines { group.addTask { await engine.stop() } }
-            }
-            if startedAt > 0 {
-                do { try capture() } catch { failure = failure ?? error.localizedDescription }
-            }
+            await finishSession(failure: failure)
+        }
+    }
+
+    // Prepares every engine, starts them together and samples once a second until stopped, timed out or failed.
+    private func runSession(_ config: RunConfiguration) async throws {
+        report = try ReportStore(configuration: config, root: reportRoot)
+        for engine in engines {
+            try Task.checkCancellation()
+            message = "准备 \(engine.unit.rawValue)"
+            try await engine.prepare()
             snapshots = engines.map { $0.sample() }
-            failure = failure ?? snapshots.compactMap(\.error).first
-            if let interval { signposter.endInterval("FurnaceSession", interval) }
-            interval = nil
-            UIApplication.shared.isIdleTimerDisabled = savedIdleTimer
-            UIDevice.current.isBatteryMonitoringEnabled = savedBatteryMonitoring
-            let finalPhase: SessionPhase = failure == nil ? .completed : .failed
-            let finalReason = failure ?? stopReason
-            do {
-                try report?.finish(phase: finalPhase, reason: finalReason, elapsed: elapsed, engines: snapshots)
-            } catch {
-                failure = "报告保存失败：\(error.localizedDescription)"
+        }
+        try Task.checkCancellation()
+        startedAt = ProcessInfo.processInfo.systemUptime
+        lastSampleTime = startedAt
+        lastCPUSeconds = furnace_process_cpu_seconds()
+        interval = signposter.beginInterval("FurnaceSession")
+        for engine in engines { engine.start() }
+        phase = .running
+        message = "持续提交负载 · 温度变化只记录"
+        while !Task.isCancelled {
+            try await Task.sleep(for: .seconds(1))
+            try capture()
+            if let error = snapshots.compactMap(\.error).first { throw LoadError(error) }
+            if config.durationSeconds > 0 && elapsed >= Double(config.durationSeconds) {
+                stopReason = "定时结束"; break
             }
-            report = nil
-            engines.removeAll()
-            phase = failure == nil ? .completed : .failed
-            message = failure ?? finalReason
-            reports = ReportStore.recentReports()
-            runTask = nil
-            if failure == nil && stopReason == "定时结束" && !sequence.isEmpty {
-                suiteIndex += 1
-                configuration = sequence.removeFirst()
-                suiteProgress = "自测 \(suiteIndex)/\(suiteTotal)"
-                start()
-            } else {
-                sequence.removeAll()
-                suiteProgress = nil
-                if let savedManualConfiguration { configuration = savedManualConfiguration }
-                savedManualConfiguration = nil
-            }
+        }
+    }
+
+    // Stops the engines and saves the report, then runs the next timed suite step or restores the manual settings.
+    private func finishSession(failure: String?) async {
+        var failure = failure
+        phase = .stopping
+        message = "停止提交并等待在途计算结束"
+        await withTaskGroup(of: Void.self) { group in
+            for engine in engines { group.addTask { await engine.stop() } }
+        }
+        if startedAt > 0 {
+            do { try capture() } catch { failure = failure ?? error.localizedDescription }
+        }
+        snapshots = engines.map { $0.sample() }
+        failure = failure ?? snapshots.compactMap(\.error).first
+        if let interval { signposter.endInterval("FurnaceSession", interval) }
+        interval = nil
+        UIApplication.shared.isIdleTimerDisabled = savedIdleTimer
+        UIDevice.current.isBatteryMonitoringEnabled = savedBatteryMonitoring
+        let finalPhase: SessionPhase = failure == nil ? .completed : .failed
+        let finalReason = failure ?? stopReason
+        do {
+            try report?.finish(phase: finalPhase, reason: finalReason, elapsed: elapsed, engines: snapshots)
+        } catch {
+            failure = "报告保存失败：\(error.localizedDescription)"
+        }
+        report = nil
+        engines.removeAll()
+        phase = failure == nil ? .completed : .failed
+        message = failure ?? finalReason
+        reports = ReportStore.recentReports()
+        runTask = nil
+        if failure == nil && stopReason == "定时结束" && !sequence.isEmpty {
+            suiteIndex += 1
+            configuration = sequence.removeFirst()
+            suiteProgress = "自测 \(suiteIndex)/\(suiteTotal)"
+            start()
+        } else {
+            sequence.removeAll()
+            suiteProgress = nil
+            if let savedManualConfiguration { configuration = savedManualConfiguration }
+            savedManualConfiguration = nil
         }
     }
 
