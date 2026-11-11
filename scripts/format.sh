@@ -169,10 +169,11 @@ if [ "$LINT" -eq 1 ]; then
   if [ ${#SWIFT[@]} -gt 0 ]; then
     echo "== SwiftLint"
     swiftlint lint --strict --quiet --no-cache -- "${SWIFT[@]}"
-    # 复杂度不认 lizard 的豁免注释与白名单文件，要放宽只能改 MAX_COMPLEXITY。
+    # 复杂度不认豁免，要放宽只能改 MAX_COMPLEXITY：lizard 会放过带 #lizard forgives 注释的函数、注释里含
+    # GENERATED CODE 的整个文件和 whitelizard.txt 里列的函数，所以先查一遍。
     echo "== Swift 函数圈复杂度不超过 $MAX_COMPLEXITY"
-    if grep -n -i 'lizard forgive' -- "${SWIFT[@]}" || [ -e whitelizard.txt ]; then
-      echo "lint: 不接受 lizard 的豁免注释与 whitelizard.txt" >&2
+    if grep -n -i -e 'lizard forgive' -e 'generated code' -- "${SWIFT[@]}" || [ -e whitelizard.txt ]; then
+      echo "lint: 不接受 lizard 的豁免注释（#lizard forgives、GENERATED CODE）与 whitelizard.txt" >&2
       exit 1
     fi
     lizard -l swift -C "$MAX_COMPLEXITY" -w -- "${SWIFT[@]}"
