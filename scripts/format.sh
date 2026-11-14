@@ -169,9 +169,11 @@ if [ "$LINT" -eq 1 ]; then
   if [ ${#PY[@]} -gt 0 ]; then
     echo "== ruff check"
     ruff check --output-format concise -- "${PY[@]}"
-    # --no-ignore：不认行内的 noqa: complexipy，要放宽只能改 MAX_COMPLEXITY。
+    # --no-ignore 不认行内的 noqa: complexipy；--snapshot-ignore 不认基线快照 complexipy-snapshot.json；
+    # --isolated 不读 pyproject.toml、complexipy.toml 里的配置。要放宽只能改 MAX_COMPLEXITY。
     echo "== Python 函数认知复杂度不超过 $MAX_COMPLEXITY"
-    complexipy --max-complexity-allowed "$MAX_COMPLEXITY" --no-ignore --failed --plain -- "${PY[@]}"
+    complexipy --max-complexity-allowed "$MAX_COMPLEXITY" --no-ignore --snapshot-ignore --isolated --failed --plain \
+      -- "${PY[@]}"
   fi
   if [ ${#SH[@]} -gt 0 ]; then
     echo "== shellcheck"
