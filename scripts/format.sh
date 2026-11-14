@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 统一格式化与检查入口：Python 用 ruff，JS/TS 与 Markdown/YAML/JSON 用 prettier，Shell 用 shfmt 与 shellcheck，
+# 统一格式化与检查入口：Python 用 ruff（函数复杂度用 complexipy），JS/TS 与 Markdown/YAML/JSON 用 prettier，Shell 用 shfmt 与 shellcheck，
 # Swift 用 SwiftLint 与 lizard。
 # 用法：scripts/format.sh [--check | --lint]
 #   无参数：就地格式化本仓跟踪的文件与未被忽略的新文件；--check：只检查格式，不一致时列出文件并非零退出；
@@ -21,7 +21,9 @@ SWIFTLINT_VERSION=0.65.1
 # 该版本 GitHub Release 资产 swiftlint_linux_amd64.zip 的 SHA-256。
 SWIFTLINT_LINUX_AMD64_SHA256=caeed6f4a679c35539ffaf124f6c4ab4a8416917f7d8796279dc52b74026059d
 LIZARD_VERSION=1.26.0
-# 单个 Python 或 Swift 函数的圈复杂度上限与单个代码文件的行数上限。
+COMPLEXIPY_VERSION=8.3.0
+# 单个 Python 或 Swift 函数的复杂度上限与单个代码文件的行数上限。Python 量认知复杂度（complexipy），
+# Swift 量圈复杂度（lizard），两者共用这一个上限。
 MAX_COMPLEXITY=15
 MAX_LINES=2000
 # 字节须保持不变的文件（git pathspec），各语言共用；与 .prettierignore 同步维护。
@@ -67,6 +69,16 @@ ruff() {
     uvx -q "ruff==$RUFF_VERSION" "$@"
   else
     pipx run --spec "ruff==$RUFF_VERSION" ruff "$@"
+  fi
+}
+
+# 缓存放仓外：complexipy 默认在当前目录建 .complexipy_cache。
+complexipy() {
+  set -- --cache-dir "${XDG_CACHE_HOME:-$HOME/.cache}/complexipy" "$@"
+  if command -v uvx >/dev/null 2>&1; then
+    uvx -q "complexipy==$COMPLEXIPY_VERSION" "$@"
+  else
+    pipx run --spec "complexipy==$COMPLEXIPY_VERSION" complexipy "$@"
   fi
 }
 
@@ -157,10 +169,9 @@ if [ "$LINT" -eq 1 ]; then
   if [ ${#PY[@]} -gt 0 ]; then
     echo "== ruff check"
     ruff check --output-format concise -- "${PY[@]}"
-    # 复杂度不认行内的 noqa，要放宽只能改这里或 pyproject.toml。
-    echo "== Python 函数圈复杂度不超过 $MAX_COMPLEXITY"
-    ruff check --select C901 --ignore-noqa --config "lint.mccabe.max-complexity=$MAX_COMPLEXITY" \
-      --output-format concise -- "${PY[@]}"
+    # --no-ignore：不认行内的 noqa: complexipy，要放宽只能改 MAX_COMPLEXITY。
+    echo "== Python 函数认知复杂度不超过 $MAX_COMPLEXITY"
+    complexipy --max-complexity-allowed "$MAX_COMPLEXITY" --no-ignore --failed --plain -- "${PY[@]}"
   fi
   if [ ${#SH[@]} -gt 0 ]; then
     echo "== shellcheck"
