@@ -62,7 +62,7 @@ struct RunSummary: Codable {
                 ?? "development",
             build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "local",
             processors: ProcessInfo.processInfo.processorCount, configuration: configuration,
-            measurementNotes: ["CPU 为进程时间 / 墙钟时间 / 核心数；含调度开销", "GPU 为本应用 command buffer 执行耗时，不是整颗 GPU 利用率",
+            measurementNotes: ["CPU 为进程时间 / 实际用时 / 核心数；含调度开销", "GPU 为本应用 command buffer 执行耗时，不是整颗 GPU 利用率",
                                "Core ML 分配计划不是实际 ANE 占用率", "无实测瓦数、芯片温度或 ANE 利用率", "64 MiB 后停止逐秒写盘，保留最终累计读数"])
         try encoder.encode(metadata).write(to: directory.appendingPathComponent("metadata.json"), options: .atomic)
         for name in ["samples.jsonl", "samples.csv"] {
