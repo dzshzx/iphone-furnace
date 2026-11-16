@@ -63,7 +63,8 @@ jobs:
   build:
     needs: [version, checks]
     runs-on: xcode-27
-    timeout-minutes: 35
+    # 托管 macOS 机变慢时，同样的命令会慢 3 到 13 倍，build 曾用约 26 分钟；放宽到 60 分钟，正常运行不被超时打断。
+    timeout-minutes: 60
     # Only the publish step needs write access; checkout keeps the token out of git config.
     permissions:
       contents: write
