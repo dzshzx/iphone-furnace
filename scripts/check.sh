@@ -20,12 +20,19 @@ go_tool() {
 tracked_state() { git status --porcelain --untracked-files=no && git diff HEAD | git hash-object --stdin; }
 before=$(tracked_state)
 
-# 仓里的 Python 只能是允许清单里的文件：coremltools 只有 Python 版，模型生成与模型测试留在 Python。
-unexpected=$(git ls-files -- '*.py' | grep -vxF -f scripts/python-allowlist.txt || true)
-if [[ -n "$unexpected" ]]; then
-  printf 'check: 以下 Python 文件不在 scripts/python-allowlist.txt 里，新工具用 Go 写：\n%s\n' "$unexpected" >&2
-  exit 1
-fi
+# 仓里的 Python 只能是 scripts/python-allowlist.txt 列出的文件或目录（以 / 结尾）下的文件：coremltools 只有 Python 版，
+# 模型生成与模型测试留在 Python，新工具用 Go 写。清单每一行都要对得上至少一个文件，删掉的脚本同时从清单里去掉。
+git ls-files -z -- '*.py' | tr '\0' '\n' | awk '
+  NR == FNR { if ($0 != "" && $0 !~ /^#/) { allow[$0] = 1; used[$0] = 0 } next }
+  {
+    hit = 0
+    for (a in allow) if ($0 == a || (a ~ /\/$/ && index($0, a) == 1)) { used[a] = 1; hit = 1 }
+    if (!hit) { print "check: 不在 scripts/python-allowlist.txt 里的 Python 文件：" $0; bad = 1 }
+  }
+  END {
+    for (a in used) if (!used[a]) { print "check: scripts/python-allowlist.txt 这一行没有对应的文件：" a; bad = 1 }
+    exit bad
+  }' scripts/python-allowlist.txt - >&2
 
 # 工具链版本只写在 go.mod 的 go 行：本机的 Go 比它旧时 go 命令自己下载并换用这一版；比它新时直接用本机那一版，
 # 下面的断言报出来。toolchain 行会让 go 命令和 CI 的 setup-go 改按它选版本，版本就有了第二个来源。
@@ -50,7 +57,6 @@ bash scripts/format.sh --lint
 go vet ./...
 go_tool "$STATICCHECK" ./...
 go_tool "$GOCOGNIT" -over "$MAX_COGNITIVE" .
-# -count=1：测试读包目录外的文件（入库图标、工作流与 shell 脚本），测试缓存不跟踪这些输入。
 go test -count=1 ./...
 uv sync --locked
 uv run --locked python scripts/generate_models.py
