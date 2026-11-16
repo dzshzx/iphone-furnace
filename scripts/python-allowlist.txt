@@ -1,0 +1,3 @@
+scripts/generate_models.py
+scripts/tests/test_artifacts.py
+scripts/tests/test_private_ane.py

@@ -31,6 +31,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
       - name: Compute release version
         id: plan
         env:
@@ -47,7 +51,7 @@ jobs:
             require=(--require-unreleased)
           fi
           git ls-remote --tags "https://github.com/$GITHUB_REPOSITORY.git" >"$RUNNER_TEMP/tags.txt"
-          python3 scripts/release_version.py --bump "$BUMP" --head "$GITHUB_SHA" "${require[@]}" \
+          go run ./cmd/furnace-tools release-version --bump "$BUMP" --head "$GITHUB_SHA" "${require[@]}" \
             <"$RUNNER_TEMP/tags.txt" | tee -a "$GITHUB_OUTPUT"
   checks:
     permissions:
@@ -62,6 +66,7 @@ jobs:
       contents: write
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+      GOTOOLCHAIN: local
       RELEASE_VERSION: ${{ needs.version.outputs.version }}
       RELEASE_BUILD: ${{ needs.version.outputs.build }}
       RELEASE_TAG: ${{ needs.version.outputs.tag }}
@@ -69,6 +74,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # 放在最前：末尾 if: always() 的验证报告要用 Go，后面的准备步骤失败也不影响它。
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
       - name: Check private ANE model construction
         id: private-ane
         run: |
@@ -116,7 +126,7 @@ jobs:
           trap 'printf "models\t%d\n" "$((SECONDS-started))" >> build/ci-timings.tsv' EXIT
           uv sync --locked >build/models.log 2>&1
           uv run --locked python scripts/generate_models.py >>build/models.log 2>&1
-          uv run --locked python scripts/generate_icon.py >>build/models.log 2>&1
+          go run ./cmd/furnace-tools generate-icon >>build/models.log 2>&1
           uv run --locked pytest scripts/tests >>build/models.log 2>&1
           xcodegen generate >>build/models.log 2>&1
           tail -n 30 build/models.log
@@ -145,8 +155,8 @@ jobs:
           started=$SECONDS
           trap 'printf "device-build\t%d\n" "$((SECONDS-started))" >> build/ci-timings.tsv' EXIT
           bash scripts/build.sh
-          uv run --locked python scripts/verify_ipa.py dist/Furnace-unsigned.ipa \
-            --version "$RELEASE_VERSION" --build "$RELEASE_BUILD"
+          go run ./cmd/furnace-tools verify-ipa --version "$RELEASE_VERSION" --build "$RELEASE_BUILD" \
+            dist/Furnace-unsigned.ipa
       - name: Simulator lifecycle tests
         id: simulator-tests
         run: |
@@ -175,8 +185,8 @@ jobs:
             xcrun xcresulttool get test-results summary --path build/tests.xcresult >build/test-summary.json || rm -f build/test-summary.json
             xcrun xcresulttool get test-results tests --path build/tests.xcresult >build/test-cases.json || rm -f build/test-cases.json
           fi
-          versions="$(xcodebuild -version | tr '\n' ' '); iOS SDK $(xcrun --sdk iphoneos --show-sdk-version); macOS $(sw_vers -productVersion); $(python3 --version); $(uv --version 2>/dev/null || printf 'uv unavailable'); XcodeGen $(xcodegen --version 2>/dev/null || printf unavailable)"
-          python3 scripts/ci_report.py \
+          versions="$(xcodebuild -version | tr '\n' ' '); iOS SDK $(xcrun --sdk iphoneos --show-sdk-version); macOS $(sw_vers -productVersion); $(go version); $(python3 --version); $(uv --version 2>/dev/null || printf 'uv unavailable'); XcodeGen $(xcodegen --version 2>/dev/null || printf unavailable)"
+          go run ./cmd/furnace-tools ci-report \
             --commit "$GITHUB_SHA" --version "$RELEASE_VERSION" --build "$RELEASE_BUILD" --versions "$versions" \
             --private-ane '${{ steps.private-ane.outcome }}' \
             --models '${{ steps.models.outcome }}' \

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # 统一格式化与检查入口：Python 用 ruff（函数复杂度用 complexipy），JS/TS 与 Markdown/YAML/JSON 用 prettier，Shell 用 shfmt 与 shellcheck，
-# Swift 用 SwiftLint 与 lizard。
+# Swift 用 SwiftLint 与 lizard，Go 用 gofmt。
 # 用法：scripts/format.sh [--check | --lint]
 #   无参数：就地格式化本仓跟踪的文件与未被忽略的新文件；--check：只检查格式，不一致时列出文件并非零退出；
 #   --lint：跑 ruff check、shellcheck、SwiftLint、Python 与 Swift 函数复杂度上限，并检查代码文件不超过 MAX_LINES 行，
 #   有问题时非零退出。
-# 工具版本只在下方常量固定；各工具配置：pyproject.toml 的 [tool.ruff]、.prettierrc.json/.prettierignore、.editorconfig（shfmt）、
+# 工具版本只在下方常量固定（gofmt 随 go.mod 的 go 行固定的 Go）；各工具配置：pyproject.toml 的 [tool.ruff]、.prettierrc.json/.prettierignore、.editorconfig（shfmt）、
 # .swiftlint.yml。
 set -euo pipefail
 
@@ -146,6 +146,11 @@ lizard() {
   fi
 }
 
+gofmt() {
+  # gofmt 的输出随 Go 版本变：执行 go 命令按 go.mod 选出的那份工具链自带的 gofmt，不用 PATH 里的。
+  "$(go env GOROOT)/bin/gofmt" "$@"
+}
+
 max_lines() {
   # 列出行数超过 MAX_LINES 的文件并非零退出。末尾加 /dev/null 保证 wc 总会多打一行合计，sed 把这一行去掉。
   wc -l -- "$@" /dev/null | sed '$d' | awk -v max="$MAX_LINES" '$1 > max { print; bad = 1 } END { exit bad }'
@@ -158,10 +163,12 @@ mapfile -d '' JS < <(files '*.js' '*.mjs' '*.cjs' '*.jsx' '*.ts' '*.mts' '*.cts'
 wait "$!"
 mapfile -d '' SH < <(files '*.sh' '*.bash')
 wait "$!"
+mapfile -d '' GO < <(files '*.go')
+wait "$!"
 
 if [ "$LINT" -eq 1 ]; then
   # 每一步直接调用工具并原样透出它的输出，非零即随 set -e 退出。
-  mapfile -d '' CODE < <(files '*.py' '*.pyi' '*.sh' '*.bash' '*.swift' '*.metal' '*.h' '*.mm' '*.m' '*.cpp' \
+  mapfile -d '' CODE < <(files '*.py' '*.pyi' '*.sh' '*.bash' '*.swift' '*.metal' '*.h' '*.mm' '*.m' '*.cpp' '*.go' \
     '*.js' '*.mjs' '*.cjs' '*.jsx' '*.ts' '*.mts' '*.cts' '*.tsx')
   wait "$!"
   mapfile -d '' SWIFT < <(files '*.swift')
@@ -223,6 +230,18 @@ if [ ${#SH[@]} -gt 0 ]; then
     fi
   else
     shfmt -w -- "${SH[@]}"
+  fi
+fi
+if [ ${#GO[@]} -gt 0 ]; then
+  if [ "$CHECK" -eq 1 ]; then
+    rc=0
+    bad=$(gofmt -l -- "${GO[@]}") || rc=$?
+    if [ -n "$bad" ] || [ "$rc" -ne 0 ]; then
+      printf 'gofmt: 需要重排：\n%s\n' "$bad"
+      FAIL=1
+    fi
+  else
+    gofmt -w -- "${GO[@]}"
   fi
 fi
 

@@ -11,13 +11,20 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     # 合入前门禁 scripts/check.sh 是唯一来源：格式、ruff check、shellcheck、SwiftLint、
-    # Python 与 Swift 函数复杂度、代码文件行数、uv sync --locked、模型与图标生成、pytest，
-    # 并要求生成后已跟踪文件不变。
+    # Python、Swift 与 Go 函数复杂度、代码文件行数、Python 允许清单、Go 版本断言、go vet、staticcheck、
+    # go test、uv sync --locked、模型与图标生成、pytest，并要求生成后已跟踪文件不变。
+    env:
+      # setup-go 已装好 go.mod 写的确切版本，不再按需下载别的工具链。
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: '0.13.6'
           enable-cache: true
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
       - name: Check build tools
         run: bash scripts/check.sh

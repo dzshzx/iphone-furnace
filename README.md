@@ -52,13 +52,14 @@ Core ML 后端使用 `.cpuAndNeuralEngine`，识别包含版本前缀的卷积�
 
 ## 构建
 
-本地 Linux 使用 `uv` 和 C++20 编译器（`c++`）生成模型、验证 Python 工具与原生数据格式；Swift/Metal 的编译和模拟器验证在 GitHub 的 Apple Silicon `xcode-27` runner 完成。
+本地 Linux 使用 `uv` 和 C++20 编译器（`c++`）生成模型、验证模型与原生数据格式，用 Go（版本见 `go.mod`）运行构建工具 `cmd/furnace-tools`（发版版本号、验证报告、IPA 检查、图标生成）；Swift/Metal 的编译和模拟器验证在 GitHub 的 Apple Silicon `xcode-27` runner 完成。
 
 ```sh
 uv sync --locked
 uv run --locked python scripts/generate_models.py
-uv run --locked python scripts/generate_icon.py
+go run ./cmd/furnace-tools generate-icon
 uv run --locked pytest scripts/tests
+go test ./...
 bash scripts/format.sh --check
 bash scripts/format.sh --lint
 # 以下命令需要 Xcode 27.0 和 XcodeGen 2.46.0：
@@ -66,9 +67,9 @@ xcodegen generate
 bash scripts/build.sh
 ```
 
-提交前运行 `scripts/format.sh` 就地格式化（Python 用 ruff format，Markdown/YAML/JSON 用 prettier，Shell 用 shfmt；版本固定在脚本内，配置见 `pyproject.toml` 的 `[tool.ruff]`、`.prettierrc.json`、`.editorconfig`，字节须保持不变的文件列在脚本 `EXCLUDE` 与 `.prettierignore`）。`scripts/format.sh --check` 只检查格式；`scripts/format.sh --lint` 跑 ruff check、shellcheck、SwiftLint（默认规则集，警告也算失败，配置见 `.swiftlint.yml`）、Python 函数认知复杂度上限（15，用 complexipy 量）、Swift 函数圈复杂度上限（15，用 lizard 量；两者都不认豁免注释，complexipy 也不认基线快照和配置文件里的放宽）与代码文件行数上限（2000 行）；两者有问题时非零退出，CI 同样运行它们。Linux x86_64 上脚本按固定版本与 SHA-256 下载 SwiftLint 静态二进制，缓存在 `~/.cache/furnace/`；静态版没有 SourceKit，默认规则里的 `statement_position` 在 Linux 上跳过，输出里有一行 warning。重排提交登记在 `.git-blame-ignore-revs`，本地运行 `git config blame.ignoreRevsFile .git-blame-ignore-revs` 让 blame 跳过它。
+提交前运行 `scripts/format.sh` 就地格式化（Python 用 ruff format，Go 用 gofmt，Markdown/YAML/JSON 用 prettier，Shell 用 shfmt；版本固定在脚本内，配置见 `pyproject.toml` 的 `[tool.ruff]`、`.prettierrc.json`、`.editorconfig`，字节须保持不变的文件列在脚本 `EXCLUDE` 与 `.prettierignore`）。`scripts/format.sh --check` 只检查格式；`scripts/format.sh --lint` 跑 ruff check、shellcheck、SwiftLint（默认规则集，警告也算失败，配置见 `.swiftlint.yml`）、Python 函数认知复杂度上限（15，用 complexipy 量）、Swift 函数圈复杂度上限（15，用 lizard 量；两者都不认豁免注释，complexipy 也不认基线快照和配置文件里的放宽）与代码文件行数上限（2000 行）；两者有问题时非零退出，CI 同样运行它们。Linux x86_64 上脚本按固定版本与 SHA-256 下载 SwiftLint 静态二进制，缓存在 `~/.cache/furnace/`；静态版没有 SourceKit，默认规则里的 `statement_position` 在 Linux 上跳过，输出里有一行 warning。重排提交登记在 `.git-blame-ignore-revs`，本地运行 `git config blame.ignoreRevsFile .git-blame-ignore-revs` 让 blame 跳过它。
 
-Linux 工具检查的汇总入口是 `bash scripts/check.sh`（格式、ruff check、shellcheck 与 SwiftLint 等检查、`uv sync --locked`、模型与图标生成、pytest，并要求生成后已跟踪文件不变），**Build tools checks**（只由 **Release** 工作流调用）直接运行它。日常改动用 `wt -C <任务 worktree> land` 合入，它先在任务 worktree 跑 `bash scripts/check.sh`，通过后合入并推送；不触发普通提交或 PR 的远端 CI。依赖升级由 agent 每周批量执行。按需触发 **Release** 工作流时，先调用 **Build tools checks**（`.github/workflows/ci.yml`）完成格式与检查、模型/图标生成和 Python/原生数据构建测试，再做 macOS 原生构建、模拟器测试和 IPA 验证。Linux 工具检查本身不代表 Apple 平台或真机验收完成。
+Linux 工具检查的汇总入口是 `bash scripts/check.sh`（格式、ruff check、shellcheck 与 SwiftLint 等检查、Python 允许清单、Go 的版本断言、go vet、staticcheck、认知复杂度与 go test、`uv sync --locked`、模型与图标生成、pytest，并要求生成后已跟踪文件不变；仓里的 Python 只能是 `scripts/python-allowlist.txt` 列出的文件，即依赖 coremltools 的模型生成与模型测试），**Build tools checks**（只由 **Release** 工作流调用）直接运行它。日常改动用 `wt -C <任务 worktree> land` 合入，它先在任务 worktree 跑 `bash scripts/check.sh`，通过后合入并推送；不触发普通提交或 PR 的远端 CI。依赖升级由 agent 每周批量执行。按需触发 **Release** 工作流时，先调用 **Build tools checks**（`.github/workflows/ci.yml`）完成格式与检查、模型/图标生成和 Python/原生数据构建测试，再做 macOS 原生构建、模拟器测试和 IPA 验证。Linux 工具检查本身不代表 Apple 平台或真机验收完成。
 
 验证 Apple 平台改动时，在任意分支以 dry_run 运行发版工作流：`gh workflow run release.yml --ref <分支> -f dry_run=true`。它先复用同一套 Linux 检查，通过后才启动 macOS，完整执行私有 ANE 原生检查、Core ML 计算计划检查、设备构建和模拟器测试，最后在运行摘要里列出将要发布的版本、源提交和各资产 sha256，不打 tag、不发布。同一分支上新的 dry_run 会取消旧运行；正式发版排队执行，不被取消。
 
@@ -83,7 +84,7 @@ Linux 工具检查的汇总入口是 `bash scripts/check.sh`（格式、ruff che
 - 安装包只经 GitHub Release 交付，不作为 Actions 产物保存；诊断文件经 `actions/upload-artifact` 归档，保留 7 天。
 - 只有发布步骤需要 `contents: write`；checkout 设 `persist-credentials: false`，令牌不写进 git 配置，也不进入构建脚本的环境变量。
 
-模型生成后可运行 `uv run --locked pytest scripts/tests` 验证构建工具；Xcode 的 `Furnace` scheme 包含会话生命周期、七种选择组合、错误回收、报告、原生 CPU、Metal 和模型数值校验，以及模拟器 NPU 不可用测试。完整 Xcode 命令以工作流为准。模拟器与云端 macOS 结果不能证明目标 iPhone 的 GPU/ANE 性能。
+模型生成后可运行 `uv run --locked pytest scripts/tests` 验证模型，`go test ./...` 验证构建工具；Xcode 的 `Furnace` scheme 包含会话生命周期、七种选择组合、错误回收、报告、原生 CPU、Metal 和模型数值校验，以及模拟器 NPU 不可用测试。完整 Xcode 命令以工作流为准。模拟器与云端 macOS 结果不能证明目标 iPhone 的 GPU/ANE 性能。
 
 计算计划回归覆盖三档真实编译模型的卷积识别，以及 CPU/GPU/未知分配必须拒绝启动。云端另用 `scripts/check_compute_plan.swift` 检查 macOS 的 CPU-only 与 CPU+ANE 计划，记录原始算子名；宿主是否可用 ANE 不作为 iPhone 验收结论。
 

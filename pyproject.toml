@@ -6,9 +6,7 @@ dependencies = [
     # 预发布版：coremltools 正式版 9.0 没有 Python 3.14 轮子（上游 apple/coremltools#2646），
     # 9.1.dev1 有；正式版 9.1 发布后换回正式版。
     "coremltools==9.1.dev1",
-    "macholib==1.16.4",
     "numpy==2.5.4",
-    "pillow==13.0.0",
 ]
 
 [dependency-groups]
@@ -16,11 +14,6 @@ dev = ["pytest==9.2.0", "pyyaml==6.0.3"]
 
 
 # ruff format 使用默认风格；版本固定在 scripts/format.sh。
-[tool.ruff]
-# release.yml 用 runner 自带的 python3 运行 ci_report.py 与 release_version.py（版本不由本仓固定），
-# 格式化不得写出 3.14 才能解析的语法（如不带括号的 except A, B）。
-per-file-target-version = { "scripts/ci_report.py" = "py312", "scripts/release_version.py" = "py312" }
-
 [tool.ruff.lint]
 # EXE001、EXE002（shebang 与可执行位是否一致）ruff 在 WSL 上不执行，在别的 Linux 上才执行；
 # 关掉后本机门禁与 GitHub 托管机上的结果相同。

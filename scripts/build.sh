@@ -11,7 +11,7 @@ xcodebuild -project Furnace.xcodeproj -scheme Furnace -configuration Release \
 mkdir -p build/package/Payload
 ditto build/device/Build/Products/Release-iphoneos/Furnace.app build/package/Payload/Furnace.app
 ditto -c -k --keepParent build/package/Payload dist/Furnace-unsigned.ipa
-uv run --locked python scripts/verify_ipa.py dist/Furnace-unsigned.ipa
+go run ./cmd/furnace-tools verify-ipa dist/Furnace-unsigned.ipa
 ditto -c -k --keepParent build/device/Build/Products/Release-iphoneos/Furnace.app.dSYM dist/Furnace.dSYM.zip
 {
   xcodebuild -version

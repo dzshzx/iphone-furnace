@@ -1,66 +1,5 @@
-import importlib.util
-import plistlib
-import struct
-import zipfile
-from pathlib import Path
-
 import pytest
 from coremltools.models.utils import load_spec
-
-MODULE_PATH = Path(__file__).parents[1] / "verify_ipa.py"
-SPEC = importlib.util.spec_from_file_location("verify_ipa", MODULE_PATH)
-verifier = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(verifier)
-
-
-def package(path, platform=2, missing_model=False, signed=False):
-    prefix = "Payload/Furnace.app/"
-    binary = struct.pack("<8I", 0xFEEDFACF, 0x0100000C, 0, 2, 1, 24, 0, 0)
-    binary += struct.pack("<6I", 0x32, 24, platform, 0, 0, 0)
-    with zipfile.ZipFile(path, "w") as archive:
-        archive.writestr(
-            prefix + "Info.plist",
-            plistlib.dumps(
-                {
-                    "CFBundleExecutable": "Furnace",
-                    "CFBundleSupportedPlatforms": ["iPhoneOS"],
-                    "MinimumOSVersion": "27.0",
-                    "CFBundleShortVersionString": "0.1.1",
-                    "CFBundleVersion": "1001",
-                }
-            ),
-        )
-        archive.writestr(prefix + "Furnace", binary)
-        archive.writestr(prefix + "default.metallib", b"test fixture")
-        for channels in (256, 384, 512):
-            if channels == 512 and missing_model:
-                continue
-            archive.writestr(
-                prefix + f"Stress{channels}.mlmodelc/model.mil", b"fixture"
-            )
-        if signed:
-            archive.writestr(prefix + "_CodeSignature/CodeResources", b"fixture")
-
-
-def test_device_package_and_rejection_of_simulator_missing_models_and_signatures(
-    tmp_path,
-):
-    path = tmp_path / "test.ipa"
-    package(path)
-    verifier.verify(path)
-    for options in ({"platform": 7}, {"missing_model": True}, {"signed": True}):
-        package(path, **options)
-        with pytest.raises(AssertionError):
-            verifier.verify(path)
-
-
-def test_release_build_must_carry_the_computed_version_and_build(tmp_path):
-    path = tmp_path / "test.ipa"
-    package(path)
-    verifier.verify(path, version="0.1.1", build="1001")
-    for expected in ({"version": "0.1.2"}, {"build": "1002"}):
-        with pytest.raises(AssertionError):
-            verifier.verify(path, **expected)
 
 
 @pytest.mark.parametrize("channels", [256, 384, 512])
@@ -78,28 +17,3 @@ def test_generated_graph_retains_runtime_input_and_compute_layers(channels):
     operations = [op.type for block in blocks for op in block.operations]
     assert operations.count("conv") == 16
     assert operations.count("relu") == 16
-
-
-def test_rejects_non_arm64_and_truncated_mach_o(tmp_path):
-    path = tmp_path / "test.ipa"
-    package(path)
-    good = zipfile.ZipFile(path).read("Payload/Furnace.app/Furnace")
-    assert verifier.build_platforms(good) == [2]
-    x86 = struct.pack("<I", 0xFEEDFACF) + struct.pack("<I", 0x01000007) + good[8:]
-    with pytest.raises(AssertionError):
-        verifier.build_platforms(x86)
-    with pytest.raises(AssertionError):
-        verifier.build_platforms(good[:40])
-
-
-def test_icon_matches_committed_pixels():
-    from PIL import Image, ImageChops
-
-    spec = importlib.util.spec_from_file_location(
-        "generate_icon", Path(__file__).parents[1] / "generate_icon.py"
-    )
-    icon = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(icon)
-    root = Path(__file__).parents[2]
-    committed = Image.open(root / icon.OUTPUT).convert("RGB")
-    assert ImageChops.difference(icon.render(), committed).getbbox() is None
