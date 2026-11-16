@@ -52,7 +52,7 @@ Core ML 后端使用 `.cpuAndNeuralEngine`，识别包含版本前缀的卷积�
 
 ## 构建
 
-本地 Linux 使用 `uv` 和 C++20 编译器（`c++`）生成模型、验证模型与原生数据格式，用 Go（版本见 `go.mod`）运行构建工具 `cmd/furnace-tools`（发版版本号、验证报告、IPA 检查、图标生成）；Swift/Metal 的编译和模拟器验证在 GitHub 的 Apple Silicon `xcode-27` runner 完成。
+本地 Linux 使用 `uv` 和 C++20 编译器（`c++`）生成模型、验证模型与原生数据格式，用 Go（版本见 `go.mod`）运行构建工具 `cmd/furnace-tools`（发版版本号与发版摘要、验证报告、IPA 检查、图标生成）；Swift/Metal 的编译和模拟器验证在 GitHub 的 Apple Silicon `xcode-27` runner 完成。
 
 ```sh
 uv sync --locked
@@ -69,7 +69,7 @@ bash scripts/build.sh
 
 提交前运行 `scripts/format.sh` 就地格式化（Python 用 ruff format，Go 用 gofmt，Markdown/YAML/JSON 用 prettier，Shell 用 shfmt；版本固定在脚本内，配置见 `pyproject.toml` 的 `[tool.ruff]`、`.prettierrc.json`、`.editorconfig`，字节须保持不变的文件列在脚本 `EXCLUDE` 与 `.prettierignore`）。`scripts/format.sh --check` 只检查格式；`scripts/format.sh --lint` 跑 ruff check、shellcheck、SwiftLint（默认规则集，警告也算失败，配置见 `.swiftlint.yml`）、Python 函数认知复杂度上限（15，用 complexipy 量）、Swift 函数圈复杂度上限（15，用 lizard 量；两者都不认豁免注释，complexipy 也不认基线快照和配置文件里的放宽）与代码文件行数上限（2000 行）；两者有问题时非零退出，CI 同样运行它们。Linux x86_64 上脚本按固定版本与 SHA-256 下载 SwiftLint 静态二进制，缓存在 `~/.cache/furnace/`；静态版没有 SourceKit，默认规则里的 `statement_position` 在 Linux 上跳过，输出里有一行 warning。重排提交登记在 `.git-blame-ignore-revs`，本地运行 `git config blame.ignoreRevsFile .git-blame-ignore-revs` 让 blame 跳过它。
 
-Linux 工具检查的汇总入口是 `bash scripts/check.sh`（格式、ruff check、shellcheck 与 SwiftLint 等检查、Python 允许清单、Go 的版本断言、go vet、staticcheck、认知复杂度与 go test、`uv sync --locked`、模型与图标生成、pytest，并要求生成后已跟踪文件不变；仓里的 Python 只能是 `scripts/python-allowlist.txt` 列出的文件，即依赖 coremltools 的模型生成与模型测试），**Build tools checks**（只由 **Release** 工作流调用）直接运行它。日常改动用 `wt -C <任务 worktree> land` 合入，它先在任务 worktree 跑 `bash scripts/check.sh`，通过后合入并推送；不触发普通提交或 PR 的远端 CI。依赖升级由 agent 每周批量执行。按需触发 **Release** 工作流时，先调用 **Build tools checks**（`.github/workflows/ci.yml`）完成格式与检查、模型/图标生成和 Python/原生数据构建测试，再做 macOS 原生构建、模拟器测试和 IPA 验证。Linux 工具检查本身不代表 Apple 平台或真机验收完成。
+Linux 工具检查的汇总入口是 `bash scripts/check.sh`（格式、ruff check、shellcheck 与 SwiftLint 等检查、Python 允许清单、Go 的版本断言、go vet、staticcheck、认知复杂度与 go test、`uv sync --locked`、模型与图标生成、pytest，并要求生成后已跟踪文件不变；仓里的 Python 只能是 `scripts/python-allowlist.txt` 列出的文件，即依赖 coremltools 的模型生成与模型测试），**Build tools checks**（只由 **Release** 工作流调用）直接运行它。日常改动用 `wt -C <任务 worktree> land` 合入，它先在任务 worktree 跑 `bash scripts/check.sh`，通过后合入并推送；不触发普通提交或 PR 的远端 CI。依赖升级由 agent 每周批量执行。按需触发 **Release** 工作流时，先算出版本号，再调用 **Build tools checks**（`.github/workflows/ci.yml`）完成格式与检查、模型/图标生成和 Python/原生数据构建测试，再做 macOS 原生构建、模拟器测试和 IPA 验证。Linux 工具检查本身不代表 Apple 平台或真机验收完成。
 
 验证 Apple 平台改动时，在任意分支以 dry_run 运行发版工作流：`gh workflow run release.yml --ref <分支> -f dry_run=true`。它先复用同一套 Linux 检查，通过后才启动 macOS，完整执行私有 ANE 原生检查、Core ML 计算计划检查、设备构建和模拟器测试，最后在运行摘要里列出将要发布的版本、源提交和各资产 sha256，不打 tag、不发布。同一分支上新的 dry_run 会取消旧运行；正式发版排队执行，不被取消。
 
@@ -94,11 +94,12 @@ Linux 工具检查的汇总入口是 `bash scripts/check.sh`（格式、ruff che
 
 发版只有一条命令：`gh workflow run release.yml --ref master -f bump=patch`。`bump` 可选 `patch`、`minor`、`major`；minor（用户能感知的新能力）与 major（含 0.x→1.0）须维护者先确认，内部重构、目录搬迁、删兼容层不算破坏性变更。加 `-f dry_run=true` 只验证不发布，可在任意分支运行；正式发版只能在 `master` 上运行。
 
-- 版本号：工作流取仓库里最高的纯 `vX.Y.Z` tag（按语义化版本比较），按 `bump` 升一档。版本号只在构建时写进 `project.yml` 的 `MARKETING_VERSION`，不提交回仓库；仓里放开发占位值 `0.0.0`，本地构建显示 `0.0.0 (0)`。
+- 版本号：工作流取仓库里最高的纯 `vX.Y.Z` tag（按语义化版本比较），按 `bump` 升一档。`scripts/build.sh` 把版本号与 build 号作为 xcodebuild 参数（`MARKETING_VERSION`、`CURRENT_PROJECT_VERSION`）传入，不改 `project.yml`，也不提交回仓库；仓里放开发占位值 `0.0.0`，本地构建显示 `0.0.0 (0)`。
 - build 号（`CURRENT_PROJECT_VERSION`）：`major × 1000000 + minor × 1000 + patch`，例如 `0.1.1` 为 `1001`，随版本单调递增；minor 或 patch 达到 1000 时工作流报错。
-- 流程：核对分支并算出版本号 → Linux 门禁 → 带新版本号的 macOS 构建与模拟器测试 → 核对 IPA 里的版本号与 build 号 → 打附注 tag `v<版本号>` → 发布 GitHub Release，资产为 `Furnace-unsigned.ipa` 与 `.sha256`，正文为 `validation-report.md` 加 `source_commit`。
-- `master` 头提交已带纯 `vX.Y.Z` tag 时，正式发版直接失败（这个提交已发过版）。
-- 任一步失败都不留 tag：修好后用同一 `bump` 重跑。已发布的 tag 不移动、不删除、不复用，版本只升不降，出问题修代码后发下一个 patch。
+- 流程：核对分支、是否已发过版并算出版本号 → Linux 门禁 → 带新版本号的 macOS 构建与模拟器测试 → 核对 IPA 里的版本号与 build 号 → 删除同名旧草稿 → 建含全部资产的草稿 Release → 打附注 tag `v<版本号>` → 草稿转正。资产为 `Furnace-unsigned.ipa` 与 `.sha256`，正文为 `validation-report.md` 加 `source_commit`。
+- 已发过版：`master` 头提交带纯 `vX.Y.Z` tag，且同名 GitHub Release 已发布（非草稿）。这时正式发版在门禁之前直接失败。
+- 续跑：头提交有这样的 tag 但同名 Release 未发布，说明上次发版没做完；重跑时沿用这个版本（不再升档），跳过打 tag，继续发布。
+- 出错后怎么办：修好后用同一条命令重跑，不用手工删 tag、删草稿或补发布。已发布的 tag 不移动、不删除、不复用，版本只升不降，出问题修代码后发下一个 patch。
 
 ## 结构与依赖
 

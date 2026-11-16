@@ -1,6 +1,7 @@
 // Command furnace-tools holds the build-time helpers of the Furnace release:
-// release version planning, the macOS validation report, the unsigned IPA
-// check and the app icon renderer. Standard library only, run with
+// release version planning, the release plan summary and notes, the macOS
+// validation report, the unsigned IPA check and the app icon renderer.
+// Standard library only, run with
 // `go run ./cmd/furnace-tools <subcommand>` from the repository root.
 package main
 
@@ -15,7 +16,8 @@ import (
 const usage = `用法：furnace-tools <子命令> [参数]
 
 子命令：
-  release-version  从 git ls-remote --tags 的输出算下一个版本号与 build 号
+  release-version  从 git ls-remote --tags 的输出与已发布的 Release 算版本号与 build 号，判定续跑
+  release-summary  输出发版计划摘要（版本、源提交、资产 sha256），写出 Release 正文
   ci-report        汇总一次 macOS CI 运行，输出 Markdown 验证报告
   verify-ipa       检查未签名 IPA：arm64、iOS 平台、三档模型、Metal 内核、无签名
   generate-icon    生成确定性的 App 图标 PNG
@@ -35,6 +37,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	commands := map[string]func([]string, io.Reader, io.Writer, io.Writer) error{
 		"release-version": releaseVersionMain,
+		"release-summary": releaseSummaryMain,
 		"ci-report":       ciReportMain,
 		"verify-ipa":      verifyIPAMain,
 		"generate-icon":   generateIconMain,

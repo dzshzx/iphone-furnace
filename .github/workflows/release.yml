@@ -15,6 +15,10 @@ on:
         default: false
 permissions:
   contents: read
+defaults:
+  run:
+    # 显式写 bash 才带 -o pipefail：管道里 go run 失败时步骤随之失败，不被 tee 的退出码盖住。
+    shell: bash
 concurrency:
   # dry_run 在同一分支上新运行取消旧运行；正式发版排队执行，不被取消。
   group: release-${{ inputs.dry_run && format('dry-run-{0}', github.ref) || 'publish' }}
@@ -27,6 +31,7 @@ jobs:
       version: ${{ steps.plan.outputs.version }}
       build: ${{ steps.plan.outputs.build }}
       tag: ${{ steps.plan.outputs.tag }}
+      resume: ${{ steps.plan.outputs.resume }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,25 +40,23 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      # 在门禁之前核对分支与「已发过版」，尽早失败。头提交已有纯 vX.Y.Z tag 而同名 Release 未发布时沿用该版本续跑。
       - name: Compute release version
         id: plan
         env:
           BUMP: ${{ inputs.bump }}
           DRY_RUN: ${{ inputs.dry_run }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          require=()
-          if [ "$DRY_RUN" != "true" ]; then
-            if [ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ]; then
-              echo "::error::正式发版只能在 $DEFAULT_BRANCH 上运行；其他分支加 -f dry_run=true 只做验证。"
-              exit 1
-            fi
-            require=(--require-unreleased)
-          fi
           git ls-remote --tags "https://github.com/$GITHUB_REPOSITORY.git" >"$RUNNER_TEMP/tags.txt"
-          go run ./cmd/furnace-tools release-version --bump "$BUMP" --head "$GITHUB_SHA" "${require[@]}" \
+          gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq '.[] | select(.draft | not) | .tag_name' \
+            >"$RUNNER_TEMP/published.txt"
+          go run ./cmd/furnace-tools release-version --bump "$BUMP" --head "$GITHUB_SHA" --dry-run="$DRY_RUN" \
+            --ref "$GITHUB_REF" --default-branch "$DEFAULT_BRANCH" --published "$RUNNER_TEMP/published.txt" \
             <"$RUNNER_TEMP/tags.txt" | tee -a "$GITHUB_OUTPUT"
   checks:
+    needs: version
     permissions:
       contents: read
     uses: ./.github/workflows/ci.yml
@@ -113,15 +116,6 @@ jobs:
         id: models
         run: |
           mkdir -p build
-          # 版本号只写进本次构建用的 project.yml，不提交回仓库。
-          sed -i '' -E \
-            -e "s/^( *MARKETING_VERSION: ).*/\\1'$RELEASE_VERSION'/" \
-            -e "s/^( *CURRENT_PROJECT_VERSION: ).*/\\1'$RELEASE_BUILD'/" project.yml
-          grep -qx "    MARKETING_VERSION: '$RELEASE_VERSION'" project.yml &&
-            grep -qx "    CURRENT_PROJECT_VERSION: '$RELEASE_BUILD'" project.yml || {
-            echo "::error::未能把版本号 ${RELEASE_VERSION}（build ${RELEASE_BUILD}）写进 project.yml。"
-            exit 1
-          }
           started=$SECONDS
           trap 'printf "models\t%d\n" "$((SECONDS-started))" >> build/ci-timings.tsv' EXIT
           uv sync --locked >build/models.log 2>&1
@@ -147,6 +141,7 @@ jobs:
             exit 1
           }
           cat build/compute-plan.log
+      # build.sh 把 RELEASE_VERSION 与 RELEASE_BUILD 作为 xcodebuild 参数传入，并核对 IPA 里的版本号与 build 号。
       - name: Build unsigned IPA
         id: device-build
         run: |
@@ -155,8 +150,6 @@ jobs:
           started=$SECONDS
           trap 'printf "device-build\t%d\n" "$((SECONDS-started))" >> build/ci-timings.tsv' EXIT
           bash scripts/build.sh
-          go run ./cmd/furnace-tools verify-ipa --version "$RELEASE_VERSION" --build "$RELEASE_BUILD" \
-            dist/Furnace-unsigned.ipa
       - name: Simulator lifecycle tests
         id: simulator-tests
         run: |
@@ -195,43 +188,39 @@ jobs:
             --simulator-tests '${{ steps.simulator-tests.outcome }}' \
             | tee dist/validation-report.md
           cat dist/validation-report.md >> "$GITHUB_STEP_SUMMARY"
+      # 截图失败不影响发布已验证的安装包；任一构建或测试步骤失败都不打 tag。
+      # 顺序：删同名旧草稿 → 建含全部资产的草稿 → 经 API 打附注 tag（续跑时 tag 已在本提交上，跳过）→ 转正。
+      # 任何一步失败，修好后用同一条命令重跑即可。中文文本由 furnace-tools 生成，shell 里只留 ASCII。
       - name: Publish GitHub Release
-        # 截图失败不影响发布已验证的安装包；任一构建或测试步骤失败都不打 tag。
         if: ${{ !cancelled() && steps.device-build.outcome == 'success' && steps.simulator-tests.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
           DRY_RUN: ${{ inputs.dry_run }}
+          RELEASE_RESUME: ${{ needs.version.outputs.resume }}
         run: |
           (cd dist && shasum -a 256 Furnace-unsigned.ipa >Furnace-unsigned.ipa.sha256)
-          {
-            echo "## 发版计划"
-            echo ""
-            echo "- 版本：\`$RELEASE_TAG\`（build ${RELEASE_BUILD}）"
-            echo "- 源提交：\`$GITHUB_SHA\`"
-            echo "- 资产 sha256："
-            (cd dist && shasum -a 256 Furnace-unsigned.ipa Furnace-unsigned.ipa.sha256) | sed 's/^/  - /'
-          } | tee -a "$GITHUB_STEP_SUMMARY"
+          go run ./cmd/furnace-tools release-summary --tag "$RELEASE_TAG" --build "$RELEASE_BUILD" \
+            --commit "$GITHUB_SHA" --dry-run="$DRY_RUN" --report dist/validation-report.md --notes dist/release-notes.md \
+            dist/Furnace-unsigned.ipa dist/Furnace-unsigned.ipa.sha256 | tee -a "$GITHUB_STEP_SUMMARY"
           if [ "$DRY_RUN" = "true" ]; then
-            echo "dry_run：不打 tag、不发布。" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          { cat dist/validation-report.md; printf '\nsource_commit: `%s`\n' "$GITHUB_SHA"; } >dist/release-notes.md
+          repo="$GITHUB_REPOSITORY"
+          drafts="$(gh api "repos/$repo/releases" --paginate \
+            --jq ".[] | select(.draft and .tag_name == \"$RELEASE_TAG\") | .id")"
+          for id in $drafts; do
+            gh api -X DELETE "repos/$repo/releases/$id"
+          done
           title="Furnace $RELEASE_VERSION (build $RELEASE_BUILD)"
-          tag_object="$(gh api "repos/$GITHUB_REPOSITORY/git/tags" -f tag="$RELEASE_TAG" -f message="$title" \
-            -f object="$GITHUB_SHA" -f type=commit --jq .sha)"
-          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$RELEASE_TAG" -f sha="$tag_object" >/dev/null
-          if ! gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$title" \
-            --notes-file dist/release-notes.md dist/Furnace-unsigned.ipa dist/Furnace-unsigned.ipa.sha256; then
-            if [ "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null)" = "false" ]; then
-              echo "::error::$RELEASE_TAG 已发布但 gh 报错；tag 与 Release 保留，核对 Release 页面。"
-              exit 1
-            fi
-            gh release delete "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
-            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$RELEASE_TAG"
-            echo "::error::发布失败，已删除本次推送的 tag ${RELEASE_TAG}；修好后用同一 bump 重跑。"
-            exit 1
+          gh release create "$RELEASE_TAG" --repo "$repo" --draft --target "$GITHUB_SHA" --title "$title" \
+            --notes-file dist/release-notes.md dist/Furnace-unsigned.ipa dist/Furnace-unsigned.ipa.sha256
+          if [ "$RELEASE_RESUME" != "true" ]; then
+            tag_object="$(gh api "repos/$repo/git/tags" -f tag="$RELEASE_TAG" -f message="$title" \
+              -f object="$GITHUB_SHA" -f type=commit --jq .sha)"
+            gh api "repos/$repo/git/refs" -f ref="refs/tags/$RELEASE_TAG" -f sha="$tag_object" >/dev/null
           fi
-          echo "Published [$RELEASE_TAG](https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG)." >>"$GITHUB_STEP_SUMMARY"
+          gh release edit "$RELEASE_TAG" --repo "$repo" --draft=false --verify-tag
+          echo "Published [$RELEASE_TAG](https://github.com/$repo/releases/tag/$RELEASE_TAG)." >>"$GITHUB_STEP_SUMMARY"
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

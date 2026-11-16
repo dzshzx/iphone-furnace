@@ -11,7 +11,7 @@ settings:
     IPHONEOS_DEPLOYMENT_TARGET: '27.0'
     TARGETED_DEVICE_FAMILY: '1'
     CLANG_CXX_LANGUAGE_STANDARD: c++20
-    # 开发占位值：发版时 release.yml 在生成工程前写入算出的版本号与 build 号，不提交回仓库。
+    # 开发占位值：发版时 scripts/build.sh 把算出的版本号与 build 号作为 xcodebuild 参数传入，覆盖这两项。
     MARKETING_VERSION: '0.0.0'
     CURRENT_PROJECT_VERSION: '0'
     ENABLE_USER_SCRIPT_SANDBOXING: YES

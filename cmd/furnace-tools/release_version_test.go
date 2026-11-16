@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -25,7 +27,7 @@ var (
 
 func mustPlan(t *testing.T, tags, bump, head string) releasePlan {
 	t.Helper()
-	result, err := plan(tags, bump, head)
+	result, err := plan(tags, bump, head, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,12 +58,22 @@ func TestFirstReleaseStartsFromZero(t *testing.T) {
 	}
 }
 
-func TestReportsPureTagsOnHeadThroughPeeledAnnotatedRefs(t *testing.T) {
-	if got := mustPlan(t, lsRemote, "patch", headSHA).onHead; !reflect.DeepEqual(got, []string{"v0.1.0"}) {
-		t.Fatalf("got %v", got)
+func TestHeadWithPublishedReleaseIsReleasedThroughPeeledAnnotatedRefs(t *testing.T) {
+	published := map[string]bool{"v0.1.0": true}
+	result, err := plan(lsRemote, "patch", headSHA, published)
+	if err != nil || !reflect.DeepEqual(result.released, []string{"v0.1.0"}) || result.resume || result.version != "0.9.1" {
+		t.Fatalf("got %+v, %v", result, err)
 	}
-	if got := mustPlan(t, lsRemote, "patch", zeroSHA).onHead; len(got) != 0 {
-		t.Fatalf("got %v", got)
+	if result, _ := plan(lsRemote, "patch", zeroSHA, published); len(result.released) != 0 || result.resume {
+		t.Fatalf("got %+v", result)
+	}
+}
+
+func TestHeadTagWithoutPublishedReleaseResumesThatVersion(t *testing.T) {
+	// v0.1.0 on head has no published Release (none, or only a draft): reuse it instead of bumping.
+	result, err := plan(lsRemote, "minor", headSHA, map[string]bool{"v0.9.0": true})
+	if err != nil || !result.resume || result.version != "0.1.0" || result.build != 1000 || len(result.released) != 0 {
+		t.Fatalf("got %+v, %v", result, err)
 	}
 }
 
@@ -94,19 +106,55 @@ func runCLI(stdin string, args ...string) (code int, stdout, stderr string) {
 	return code, out.String(), errOut.String()
 }
 
+// releaseVersion runs the CLI on master with the given published Release tags.
+func releaseVersion(t *testing.T, head string, published []string, extra ...string) (code int, stdout, stderr string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "published.txt")
+	if err := os.WriteFile(path, []byte(strings.Join(published, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	args := append([]string{"release-version", "--bump", "patch", "--head", head, "--published", path,
+		"--ref", "refs/heads/master", "--default-branch", "master"}, extra...)
+	return runCLI(lsRemote, args...)
+}
+
 func TestCLIPrintsGitHubOutputs(t *testing.T) {
-	code, stdout, stderr := runCLI(lsRemote, "release-version", "--bump", "patch", "--head", zeroSHA, "--require-unreleased")
-	if code != 0 || stdout != "version=0.9.1\nbuild=9001\ntag=v0.9.1\n" {
+	code, stdout, stderr := releaseVersion(t, zeroSHA, nil)
+	if code != 0 || stdout != "version=0.9.1\nbuild=9001\ntag=v0.9.1\nresume=false\n" {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
+func TestCLIResumesAnUnpublishedTagOnHead(t *testing.T) {
+	code, stdout, stderr := releaseVersion(t, headSHA, []string{"v0.9.0"})
+	if code != 0 || stdout != "version=0.1.0\nbuild=1000\ntag=v0.1.0\nresume=true\n" || !strings.Contains(stderr, "续跑") {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 }
 
 func TestCLIRefusesAHeadThatIsAlreadyReleasedUnlessDryRun(t *testing.T) {
-	code, stdout, stderr := runCLI(lsRemote, "release-version", "--bump", "patch", "--head", headSHA, "--require-unreleased")
+	code, stdout, stderr := releaseVersion(t, headSHA, []string{"v0.1.0"})
 	if code == 0 || !strings.Contains(stderr, "已发过版") || stdout != "" {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	if code, _, stderr := runCLI(lsRemote, "release-version", "--bump", "patch", "--head", headSHA); code != 0 {
+	if code, stdout, stderr := releaseVersion(t, headSHA, []string{"v0.1.0"}, "--dry-run"); code != 0 || !strings.Contains(stdout, "version=0.9.1") {
+		t.Fatalf("dry run: code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
+func TestCLIPublishesOnlyFromTheDefaultBranch(t *testing.T) {
+	code, stdout, stderr := releaseVersion(t, zeroSHA, nil, "--ref", "refs/heads/task/x")
+	if code != 1 || !strings.Contains(stderr, "只能在 master 上运行") || stdout != "" {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	if code, _, stderr := releaseVersion(t, zeroSHA, nil, "--ref", "refs/heads/task/x", "--dry-run"); code != 0 {
 		t.Fatalf("dry run refused: %s", stderr)
+	}
+}
+
+func TestCLIRequiresThePublishedList(t *testing.T) {
+	code, _, stderr := runCLI(lsRemote, "release-version", "--bump", "patch", "--head", zeroSHA, "--dry-run")
+	if code != 2 || !strings.Contains(stderr, "--published") {
+		t.Fatalf("code=%d stderr=%q", code, stderr)
 	}
 }
