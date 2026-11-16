@@ -1,12 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-build_number="${GITHUB_RUN_NUMBER:-1}"
 mkdir -p build dist
 xcodebuild -project Furnace.xcodeproj -scheme Furnace -configuration Release \
   -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/device \
-  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-  CURRENT_PROJECT_VERSION="$build_number" build >build/device-build.log 2>&1 || {
+  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build >build/device-build.log 2>&1 || {
   tail -n 120 build/device-build.log
   exit 1
 }
@@ -20,5 +18,8 @@ ditto -c -k --keepParent build/device/Build/Products/Release-iphoneos/Furnace.ap
   xcrun --sdk iphoneos --show-sdk-version
   sw_vers
   git rev-parse HEAD
-  printf 'build=%s\n' "$build_number"
+  plist=build/device/Build/Products/Release-iphoneos/Furnace.app/Info.plist
+  printf 'version=%s\nbuild=%s\n' \
+    "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" \
+    "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")"
 } >dist/build-info.txt

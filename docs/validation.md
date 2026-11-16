@@ -34,7 +34,7 @@ Core ML 持续负载验收可先使用 NPU 单独运行、256 通道、1 路并�
 
 ## 同提交完整验收清单
 
-每次完整验收固定一个 commit：先核对该 SHA 的 Linux 工具检查，再对同一 SHA 手动运行 `iOS build`。记录 Actions 运行链接、`build-diagnostics-<编号>` 中的 `validation-report.md` / `tests.xcresult` / `build-info.txt`，以及对应的未签名 IPA。失败时继续核对原始日志。未运行或缺少证据的项目保持 pending。
+每次完整验收固定一个 commit：先核对该 SHA 的 Linux 工具检查，再对同一 SHA 运行发版工作流（只验证时加 `-f dry_run=true`）。记录 Actions 运行链接、`build-diagnostics-<编号>` 中的 `validation-report.md` / `tests.xcresult` / `build-info.txt`，以及对应的未签名 IPA。失败时继续核对原始日志。未运行或缺少证据的项目保持 pending。
 
 记录字段：commit / App 版本与 build 号；CI 宿主 / Xcode / iOS SDK / XcodeGen；模拟器设备 / iOS 版本；真机型号 / iOS 完整版本 / 签名方式；测试条件（充电状态、环境条件、所选负载及持续时间）。
 

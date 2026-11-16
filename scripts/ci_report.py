@@ -1,6 +1,6 @@
 """Summarize one macOS CI run from Xcode's result bundle and build artifacts."""
 
-# Exception to the rule that entries go through uv: ios.yml
+# Exception to the rule that entries go through uv: release.yml
 # runs this with the runner's system python3 under `if: always()`, so the report
 # must still render when setup-uv or `uv sync` failed. Keep it stdlib-only and do
 # not route it through uv.
@@ -98,20 +98,7 @@ PHASE_LOGS = {
 }
 
 
-def marketing_version(root):
-    project = root / "project.yml"
-    if not project.exists():
-        return "unknown"
-    match = re.search(
-        r'^\s*MARKETING_VERSION:\s*["\']?([^"\'\s#]+)',
-        project.read_text(),
-        re.MULTILINE,
-    )
-    return match.group(1) if match else "unknown"
-
-
-def header_lines(root, commit, build, versions):
-    app_version = marketing_version(root)
+def header_lines(commit, app_version, build, versions):
     return [
         "# Furnace macOS 验证报告",
         "",
@@ -240,8 +227,8 @@ def phase_outcome_lines(root, outcomes):
     return lines
 
 
-def render(root, outcomes, commit, build, versions):
-    lines = header_lines(root, commit, build, versions)
+def render(root, outcomes, commit, app_version, build, versions):
+    lines = header_lines(commit, app_version, build, versions)
     lines += phase_lines(root, outcomes)
     lines += simulator_lines(root)
     if outcomes["device-build"] == "success":
@@ -251,7 +238,7 @@ def render(root, outcomes, commit, build, versions):
     lines += phase_outcome_lines(root, outcomes)
     lines += [
         "",
-        "证据：同次运行的 `build-diagnostics` 包含 build-info、原生检查/计算计划/构建/测试日志、xcresult 原始结果与本报告；IPA 只在升版本号的 master 运行中随 GitHub Release `v<版本号>` 发布。",
+        "证据：同次运行的 `build-diagnostics` 包含 build-info、原生检查/计算计划/构建/测试日志、xcresult 原始结果与本报告；IPA 只在非 dry_run 的发版运行中随 GitHub Release `v<版本号>` 发布。",
         "",
     ]
     return "\n".join(lines) + "\n"
@@ -261,6 +248,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path("."))
     parser.add_argument("--commit", required=True)
+    parser.add_argument("--version", required=True)
     parser.add_argument("--build", required=True)
     parser.add_argument("--versions", required=True)
     for name in PHASES:
@@ -271,7 +259,17 @@ def main():
         )
     args = parser.parse_args()
     outcomes = {name: getattr(args, name.replace("-", "_")) for name in PHASES}
-    print(render(args.root, outcomes, args.commit, args.build, args.versions), end="")
+    print(
+        render(
+            args.root,
+            outcomes,
+            args.commit,
+            args.version,
+            args.build,
+            args.versions,
+        ),
+        end="",
+    )
 
 
 if __name__ == "__main__":

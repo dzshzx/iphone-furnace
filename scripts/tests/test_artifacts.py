@@ -25,6 +25,8 @@ def package(path, platform=2, missing_model=False, signed=False):
                     "CFBundleExecutable": "Furnace",
                     "CFBundleSupportedPlatforms": ["iPhoneOS"],
                     "MinimumOSVersion": "27.0",
+                    "CFBundleShortVersionString": "0.1.1",
+                    "CFBundleVersion": "1001",
                 }
             ),
         )
@@ -50,6 +52,15 @@ def test_device_package_and_rejection_of_simulator_missing_models_and_signatures
         package(path, **options)
         with pytest.raises(AssertionError):
             verifier.verify(path)
+
+
+def test_release_build_must_carry_the_computed_version_and_build(tmp_path):
+    path = tmp_path / "test.ipa"
+    package(path)
+    verifier.verify(path, version="0.1.1", build="1001")
+    for expected in ({"version": "0.1.2"}, {"build": "1002"}):
+        with pytest.raises(AssertionError):
+            verifier.verify(path, **expected)
 
 
 @pytest.mark.parametrize("channels", [256, 384, 512])

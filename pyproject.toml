@@ -17,9 +17,9 @@ dev = ["pytest==9.2.0", "pyyaml==6.0.3"]
 
 # ruff format 使用默认风格；版本固定在 scripts/format.sh。
 [tool.ruff]
-# ios.yml 用 runner 自带的 python3 运行 ci_report.py（版本不由本仓固定），
+# release.yml 用 runner 自带的 python3 运行 ci_report.py 与 release_version.py（版本不由本仓固定），
 # 格式化不得写出 3.14 才能解析的语法（如不带括号的 except A, B）。
-per-file-target-version = { "scripts/ci_report.py" = "py312" }
+per-file-target-version = { "scripts/ci_report.py" = "py312", "scripts/release_version.py" = "py312" }
 
 [tool.ruff.lint]
 # EXE001、EXE002（shebang 与可执行位是否一致）ruff 在 WSL 上不执行，在别的 Linux 上才执行；

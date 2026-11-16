@@ -32,7 +32,7 @@ def build_platforms(binary):
     ]
 
 
-def verify(path):
+def verify(path, version=None, build=None):
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
         prefix = "Payload/Furnace.app/"
@@ -41,6 +41,12 @@ def verify(path):
             "not an iPhone device build"
         )
         assert info["MinimumOSVersion"] == "27.0", "wrong deployment target"
+        if version is not None:
+            found = info.get("CFBundleShortVersionString")
+            assert found == version, f"expected version {version}, found {found}"
+        if build is not None:
+            found = info.get("CFBundleVersion")
+            assert found == build, f"expected build {build}, found {found}"
         binary = archive.read(prefix + info["CFBundleExecutable"])
         platforms = build_platforms(binary)
         assert platforms == [2], f"expected iOS platform, found {platforms}"
@@ -54,11 +60,16 @@ def verify(path):
             for n in names
         ), "expected unsigned IPA"
         print(
-            f"Verified unsigned arm64 iOS {info['MinimumOSVersion']} IPA with all three models and Metal kernels"
+            f"Verified unsigned arm64 iOS {info['MinimumOSVersion']} IPA "
+            f"{info.get('CFBundleShortVersionString')} ({info.get('CFBundleVersion')}) "
+            "with all three models and Metal kernels"
         )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("ipa")
-    verify(parser.parse_args().ipa)
+    parser.add_argument("--version", help="expected CFBundleShortVersionString")
+    parser.add_argument("--build", help="expected CFBundleVersion")
+    args = parser.parse_args()
+    verify(args.ipa, args.version, args.build)

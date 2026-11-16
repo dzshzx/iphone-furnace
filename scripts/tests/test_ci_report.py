@@ -62,7 +62,7 @@ def test_report_keeps_simulator_ipa_and_device_evidence_separate(tmp_path):
         )
     }
     outcomes["simulator-tests"] = "failure"
-    report = render(tmp_path, outcomes, "abc123", "42", "Xcode 27.0")
+    report = render(tmp_path, outcomes, "abc123", "0.1.1", "1001", "Xcode 27.0")
     assert "准备/构建/测试耗时：20 s / 20 s / 30 s" in report
     assert "通过 15、失败 1、跳过 1" in report
     assert "expected 1 but got 0" in report
@@ -83,13 +83,13 @@ def test_report_marks_missing_mac_results_pending(tmp_path):
             "simulator-tests",
         )
     }
-    report = render(tmp_path, outcomes, "abc123", "42", "Xcode unavailable")
+    report = render(tmp_path, outcomes, "abc123", "0.1.1", "1001", "Xcode unavailable")
     assert "准备/构建/测试耗时：pending / pending / pending" in report
     assert "无可解析的 xcresult 摘要" in report
     assert "已检查 arm64" not in report
 
 
-def test_report_reads_marketing_version_in_either_quote_style(tmp_path):
+def test_report_header_names_the_release_version_and_build(tmp_path):
     outcomes = {
         name: "skipped"
         for name in (
@@ -100,12 +100,5 @@ def test_report_reads_marketing_version_in_either_quote_style(tmp_path):
             "simulator-tests",
         )
     }
-    for line in (
-        'MARKETING_VERSION: "1.2.3"',
-        "MARKETING_VERSION: '1.2.3'",
-        "MARKETING_VERSION: 1.2.3",
-    ):
-        (tmp_path / "project.yml").write_text(f"settings:\n  base:\n    {line}\n")
-        assert "build：`1.2.3 (42)`" in render(
-            tmp_path, outcomes, "abc123", "42", "Xcode"
-        )
+    report = render(tmp_path, outcomes, "abc123", "0.1.1", "1001", "Xcode")
+    assert "提交：`abc123`；build：`0.1.1 (1001)`" in report

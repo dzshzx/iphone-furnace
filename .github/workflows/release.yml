@@ -1,28 +1,70 @@
-name: iOS build
+name: Release
 on:
-  # Full Apple-platform validation is requested manually and includes Linux tools
-  # checks first. A validated master build publishes its IPA as GitHub Release
-  # v<MARKETING_VERSION> only while that tag does not exist yet.
+  # 唯一的发版入口：gh workflow run release.yml --ref master -f bump=patch。
+  # 版本号按最高的纯 vX.Y.Z tag 升一档算出；dry_run 可在任意分支跑完整验证，不打 tag、不发布。
   workflow_dispatch:
+    inputs:
+      bump:
+        description: 升级档位（minor、major 须维护者先确认）
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      dry_run:
+        description: 只验证并在摘要里打印将要发布的版本，不打 tag、不发布
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
-  group: ios-${{ github.ref }}
-  cancel-in-progress: true
+  # dry_run 在同一分支上新运行取消旧运行；正式发版排队执行，不被取消。
+  group: release-${{ inputs.dry_run && format('dry-run-{0}', github.ref) || 'publish' }}
+  cancel-in-progress: ${{ inputs.dry_run }}
 jobs:
+  version:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      build: ${{ steps.plan.outputs.build }}
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Compute release version
+        id: plan
+        env:
+          BUMP: ${{ inputs.bump }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          require=()
+          if [ "$DRY_RUN" != "true" ]; then
+            if [ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ]; then
+              echo "::error::正式发版只能在 $DEFAULT_BRANCH 上运行；其他分支加 -f dry_run=true 只做验证。"
+              exit 1
+            fi
+            require=(--require-unreleased)
+          fi
+          git ls-remote --tags "https://github.com/$GITHUB_REPOSITORY.git" >"$RUNNER_TEMP/tags.txt"
+          python3 scripts/release_version.py --bump "$BUMP" --head "$GITHUB_SHA" "${require[@]}" \
+            <"$RUNNER_TEMP/tags.txt" | tee -a "$GITHUB_OUTPUT"
   checks:
     permissions:
       contents: read
     uses: ./.github/workflows/ci.yml
   build:
-    needs: checks
+    needs: [version, checks]
     runs-on: xcode-27
     timeout-minutes: 35
-    # Only the release step needs write access; checkout keeps the token out of git config.
+    # Only the publish step needs write access; checkout keeps the token out of git config.
     permissions:
       contents: write
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+      RELEASE_VERSION: ${{ needs.version.outputs.version }}
+      RELEASE_BUILD: ${{ needs.version.outputs.build }}
+      RELEASE_TAG: ${{ needs.version.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -61,6 +103,15 @@ jobs:
         id: models
         run: |
           mkdir -p build
+          # 版本号只写进本次构建用的 project.yml，不提交回仓库。
+          sed -i '' -E \
+            -e "s/^( *MARKETING_VERSION: ).*/\\1'$RELEASE_VERSION'/" \
+            -e "s/^( *CURRENT_PROJECT_VERSION: ).*/\\1'$RELEASE_BUILD'/" project.yml
+          grep -qx "    MARKETING_VERSION: '$RELEASE_VERSION'" project.yml &&
+            grep -qx "    CURRENT_PROJECT_VERSION: '$RELEASE_BUILD'" project.yml || {
+            echo "::error::未能把版本号 $RELEASE_VERSION（build $RELEASE_BUILD）写进 project.yml。"
+            exit 1
+          }
           started=$SECONDS
           trap 'printf "models\t%d\n" "$((SECONDS-started))" >> build/ci-timings.tsv' EXIT
           uv sync --locked >build/models.log 2>&1
@@ -94,6 +145,8 @@ jobs:
           started=$SECONDS
           trap 'printf "device-build\t%d\n" "$((SECONDS-started))" >> build/ci-timings.tsv' EXIT
           bash scripts/build.sh
+          uv run --locked python scripts/verify_ipa.py dist/Furnace-unsigned.ipa \
+            --version "$RELEASE_VERSION" --build "$RELEASE_BUILD"
       - name: Simulator lifecycle tests
         id: simulator-tests
         run: |
@@ -124,7 +177,7 @@ jobs:
           fi
           versions="$(xcodebuild -version | tr '\n' ' '); iOS SDK $(xcrun --sdk iphoneos --show-sdk-version); macOS $(sw_vers -productVersion); $(python3 --version); $(uv --version 2>/dev/null || printf 'uv unavailable'); XcodeGen $(xcodegen --version 2>/dev/null || printf unavailable)"
           python3 scripts/ci_report.py \
-            --commit "$GITHUB_SHA" --build "$GITHUB_RUN_NUMBER" --versions "$versions" \
+            --commit "$GITHUB_SHA" --version "$RELEASE_VERSION" --build "$RELEASE_BUILD" --versions "$versions" \
             --private-ane '${{ steps.private-ane.outcome }}' \
             --models '${{ steps.models.outcome }}' \
             --compute-plan '${{ steps.compute-plan.outcome }}' \
@@ -133,33 +186,42 @@ jobs:
             | tee dist/validation-report.md
           cat dist/validation-report.md >> "$GITHUB_STEP_SUMMARY"
       - name: Publish GitHub Release
-        if: always() && steps.device-build.outcome == 'success' && steps.simulator-tests.outcome == 'success'
+        # 截图失败不影响发布已验证的安装包；任一构建或测试步骤失败都不打 tag。
+        if: ${{ !cancelled() && steps.device-build.outcome == 'success' && steps.simulator-tests.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          plist=build/device/Build/Products/Release-iphoneos/Furnace.app/Info.plist
-          version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")"
-          build_number="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")"
-          tag="v$version"
-          if [ "$GITHUB_REF" != "refs/heads/master" ]; then
-            echo "Release skipped: $GITHUB_REF is not master; this run only validates." | tee -a "$GITHUB_STEP_SUMMARY"
+          (cd dist && shasum -a 256 Furnace-unsigned.ipa >Furnace-unsigned.ipa.sha256)
+          {
+            echo "## 发版计划"
+            echo ""
+            echo "- 版本：\`$RELEASE_TAG\`（build $RELEASE_BUILD）"
+            echo "- 源提交：\`$GITHUB_SHA\`"
+            echo "- 资产 sha256："
+            (cd dist && shasum -a 256 Furnace-unsigned.ipa Furnace-unsigned.ipa.sha256) | sed 's/^/  - /'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "dry_run：不打 tag、不发布。" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          # ls-remote --exit-code: 0 = tag exists, 2 = absent, anything else = lookup failed.
-          tag_lookup=0
-          git ls-remote --exit-code --tags "https://github.com/$GITHUB_REPOSITORY.git" "refs/tags/$tag" >/dev/null || tag_lookup=$?
-          if [ "$tag_lookup" -eq 0 ]; then
-            echo "Release skipped: $tag already exists; bump MARKETING_VERSION in project.yml to publish a new IPA." | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          elif [ "$tag_lookup" -ne 2 ]; then
-            echo "::error::Could not check whether $tag exists (git ls-remote exit $tag_lookup)."
+          { cat dist/validation-report.md; printf '\nsource_commit: `%s`\n' "$GITHUB_SHA"; } >dist/release-notes.md
+          title="Furnace $RELEASE_VERSION (build $RELEASE_BUILD)"
+          tag_object="$(gh api "repos/$GITHUB_REPOSITORY/git/tags" -f tag="$RELEASE_TAG" -f message="$title" \
+            -f object="$GITHUB_SHA" -f type=commit --jq .sha)"
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$RELEASE_TAG" -f sha="$tag_object" >/dev/null
+          if ! gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$title" \
+            --notes-file dist/release-notes.md dist/Furnace-unsigned.ipa dist/Furnace-unsigned.ipa.sha256; then
+            if [ "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null)" = "false" ]; then
+              echo "::error::$RELEASE_TAG 已发布但 gh 报错；tag 与 Release 保留，核对 Release 页面。"
+              exit 1
+            fi
+            gh release delete "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$RELEASE_TAG"
+            echo "::error::发布失败，已删除本次推送的 tag $RELEASE_TAG；修好后用同一 bump 重跑。"
             exit 1
           fi
-          (cd dist && shasum -a 256 Furnace-unsigned.ipa > Furnace-unsigned.ipa.sha256)
-          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "Furnace $version (build $build_number)" --notes-file dist/validation-report.md \
-            dist/Furnace-unsigned.ipa dist/Furnace-unsigned.ipa.sha256
-          echo "Published [$tag](https://github.com/$GITHUB_REPOSITORY/releases/tag/$tag)." >> "$GITHUB_STEP_SUMMARY"
+          echo "Published [$RELEASE_TAG](https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG)." >>"$GITHUB_STEP_SUMMARY"
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
