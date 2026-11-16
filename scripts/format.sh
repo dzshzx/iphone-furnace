@@ -122,7 +122,7 @@ swiftlint() {
   bin="$dir/swiftlint-static"
   if [ ! -x "$bin" ]; then
     if [ "$(uname -s)-$(uname -m)" != Linux-x86_64 ]; then
-      echo "swiftlint: 需要 SwiftLint $SWIFTLINT_VERSION；只有 Linux x86_64 会自动下载，其他平台请先安装该版本" >&2
+      echo "swiftlint: 需要 SwiftLint ${SWIFTLINT_VERSION}；只有 Linux x86_64 会自动下载，其他平台请先安装该版本" >&2
       return 1
     fi
     mkdir -p "$dir"

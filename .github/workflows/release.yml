@@ -109,7 +109,7 @@ jobs:
             -e "s/^( *CURRENT_PROJECT_VERSION: ).*/\\1'$RELEASE_BUILD'/" project.yml
           grep -qx "    MARKETING_VERSION: '$RELEASE_VERSION'" project.yml &&
             grep -qx "    CURRENT_PROJECT_VERSION: '$RELEASE_BUILD'" project.yml || {
-            echo "::error::未能把版本号 $RELEASE_VERSION（build $RELEASE_BUILD）写进 project.yml。"
+            echo "::error::未能把版本号 ${RELEASE_VERSION}（build ${RELEASE_BUILD}）写进 project.yml。"
             exit 1
           }
           started=$SECONDS
@@ -196,7 +196,7 @@ jobs:
           {
             echo "## 发版计划"
             echo ""
-            echo "- 版本：\`$RELEASE_TAG\`（build $RELEASE_BUILD）"
+            echo "- 版本：\`$RELEASE_TAG\`（build ${RELEASE_BUILD}）"
             echo "- 源提交：\`$GITHUB_SHA\`"
             echo "- 资产 sha256："
             (cd dist && shasum -a 256 Furnace-unsigned.ipa Furnace-unsigned.ipa.sha256) | sed 's/^/  - /'
@@ -218,7 +218,7 @@ jobs:
             fi
             gh release delete "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
             gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$RELEASE_TAG"
-            echo "::error::发布失败，已删除本次推送的 tag $RELEASE_TAG；修好后用同一 bump 重跑。"
+            echo "::error::发布失败，已删除本次推送的 tag ${RELEASE_TAG}；修好后用同一 bump 重跑。"
             exit 1
           fi
           echo "Published [$RELEASE_TAG](https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG)." >>"$GITHUB_STEP_SUMMARY"
