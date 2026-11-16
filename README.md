@@ -109,7 +109,7 @@ Linux 工具检查的汇总入口是 `bash scripts/check.sh`（格式、ruff che
 - `Sources/Engines`、`Sources/Native`：独立 CPU/Metal/Core ML 引擎与私有桥接。引擎资源仅在准备、运行、清理三个阶段流转；停止完成后才能创建下一次会话。
 - `scripts`：可重复模型/图标生成、构建及 IPA 完整性验证；`project.yml` 为工程来源。
 
-运行时使用 Apple 系统框架；模型生成复用 coremltools/NumPy，工程生成复用 XcodeGen。专用 CPU/Metal 压测内核和私有 ABI 桥接是本项目的领域实现。第三方代码归属见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+运行时使用 Apple 系统框架；模型生成复用 coremltools/NumPy，工程生成复用 XcodeGen，构建工具 `cmd/furnace-tools` 用 howett.net/plist 读 Info.plist。专用 CPU/Metal 压测内核和私有 ABI 桥接是本项目的领域实现。第三方代码归属见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 验收状态
 

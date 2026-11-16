@@ -14,6 +14,8 @@ import (
 	"io"
 	"reflect"
 	"strings"
+
+	"howett.net/plist"
 )
 
 const (
@@ -142,13 +144,9 @@ func verifyIPA(path string, version, build *string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	parsed, err := parsePlist(plistData)
-	if err != nil {
-		return "", err
-	}
-	info, ok := parsed.(map[string]any)
-	if !ok {
-		return "", errors.New("top-level Info.plist value is not a dictionary")
+	var info map[string]any
+	if _, err := plist.Unmarshal(plistData, &info); err != nil {
+		return "", fmt.Errorf("invalid Info.plist: %w", err)
 	}
 	if err := checkInfo(info, version, build); err != nil {
 		return "", err

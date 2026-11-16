@@ -64,7 +64,7 @@ func TestReportKeepsSimulatorIPAAndDeviceEvidenceSeparate(t *testing.T) {
 	assertContains(t, report,
 		"准备/构建/测试耗时：20 s / 20 s / 30 s",
 		"通过 15、失败 1、跳过 1",
-		"expected 1 but got 0",
+		"\n- 失败 SessionTests/fail()：expected 1 but got 0\n",
 		"\n- 跳过 SessionTests/skip()： Host has no Metal device\n",
 		"未签名 IPA",
 		"真机安装/持续负载：pending",

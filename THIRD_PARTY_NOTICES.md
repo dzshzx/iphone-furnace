@@ -27,6 +27,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 Core ML and Metal are Apple system frameworks. Build tools XcodeGen (MIT),
-coremltools (BSD-3-Clause), and NumPy (BSD-3-Clause) are not embedded in the app.
+coremltools (BSD-3-Clause), NumPy (BSD-3-Clause), and the Go module
+howett.net/plist (BSD-2-Clause and BSD-3-Clause, used by furnace-tools) are not
+embedded in the app.
 Models are generated locally from deterministic synthetic weights.
 

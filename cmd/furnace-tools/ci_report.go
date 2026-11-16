@@ -5,7 +5,6 @@ package main
 // whatever files the failed steps left behind.
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -14,6 +13,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -57,19 +57,49 @@ func clean(value string) string {
 	return string(runes)
 }
 
-// loadJSON returns the decoded document, or nil when the file is missing or not valid JSON.
-func loadJSON(path string) any {
+// testSummary is the part of `xcresulttool get test-results summary` the report reads.
+// Pointer fields tell a missing value from zero.
+type testSummary struct {
+	Result       *string `json:"result"`
+	PassedTests  *int    `json:"passedTests"`
+	FailedTests  *int    `json:"failedTests"`
+	SkippedTests *int    `json:"skippedTests"`
+	Destinations []struct {
+		Device struct {
+			Name      *string `json:"deviceName"`
+			OSVersion *string `json:"osVersion"`
+		} `json:"device"`
+	} `json:"devicesAndConfigurations"`
+	TestFailures []struct {
+		Identifier *string `json:"testIdentifierString"`
+		Name       *string `json:"testName"`
+		Text       *string `json:"failureText"`
+	} `json:"testFailures"`
+}
+
+// testNode is one node of `xcresulttool get test-results tests`.
+type testNode struct {
+	NodeType   string     `json:"nodeType"`
+	Name       *string    `json:"name"`
+	Identifier *string    `json:"nodeIdentifier"`
+	Result     string     `json:"result"`
+	Children   []testNode `json:"children"`
+}
+
+// loadJSON decodes the file into value; false when it is missing or does not decode.
+func loadJSON(path string, value any) bool {
 	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
+	return err == nil && json.Unmarshal(data, value) == nil
+}
+
+// orElse returns the first present value, else fallback.
+func orElse[T any](fallback string, values ...*T) string {
+	for _, value := range values {
+		if value != nil {
+			return fmt.Sprint(*value)
+		}
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	var value any
-	if decoder.Decode(&value) != nil || decoder.More() {
-		return nil
-	}
-	return value
+	return fallback
 }
 
 func timings(path string) (map[string]int, error) {
@@ -117,22 +147,24 @@ func preparationSeconds(root string) (int, bool) {
 	return max(0, end-start), true
 }
 
-func testCases(tree any) []map[string]any {
-	object, ok := tree.(map[string]any)
-	if !ok {
+func testCases(path string) []testNode {
+	var tree struct {
+		TestNodes []testNode `json:"testNodes"`
+	}
+	if !loadJSON(path, &tree) {
 		return nil
 	}
-	var cases []map[string]any
-	var visit func(map[string]any)
-	visit = func(node map[string]any) {
-		if node["nodeType"] == "Test Case" {
+	var cases []testNode
+	var visit func(testNode)
+	visit = func(node testNode) {
+		if node.NodeType == "Test Case" {
 			cases = append(cases, node)
 		}
-		for _, child := range objects(node["children"]) {
+		for _, child := range node.Children {
 			visit(child)
 		}
 	}
-	for _, node := range objects(object["testNodes"]) {
+	for _, node := range tree.TestNodes {
 		visit(node)
 	}
 	return cases
@@ -221,63 +253,59 @@ func phaseLines(in reportInput) ([]string, error) {
 	), nil
 }
 
-func destinationLines(summary map[string]any) []string {
-	destinations := objects(get(summary, "devicesAndConfigurations", []any{}))
-	if len(destinations) == 0 {
+func destinationLines(summary testSummary) []string {
+	if len(summary.Destinations) == 0 {
 		return nil
 	}
-	device, _ := get(destinations[0], "device", map[string]any{}).(map[string]any)
-	return []string{fmt.Sprintf("模拟器：%s / iOS %s。",
-		clean(pyStr(get(device, "deviceName", "?"))), clean(pyStr(get(device, "osVersion", "?"))))}
+	device := summary.Destinations[0].Device
+	return []string{fmt.Sprintf("模拟器：%s / iOS %s。", clean(orElse("?", device.Name)), clean(orElse("?", device.OSVersion)))}
 }
 
-func failureLines(summary map[string]any) []string {
+func failureLines(summary testSummary) []string {
 	var lines []string
-	failures := objects(get(summary, "testFailures", []any{}))
-	for _, failure := range failures {
-		name := get(failure, "testIdentifierString", get(failure, "testName", "?"))
+	for _, failure := range summary.TestFailures {
 		lines = append(lines, fmt.Sprintf("- 失败 %s：%s",
-			clean(pyStr(name)), clean(pyStr(get(failure, "failureText", "xcresult 未提供原因")))))
+			clean(orElse("?", failure.Identifier, failure.Name)), clean(orElse("xcresult 未提供原因", failure.Text))))
 	}
-	if truthy(get(summary, "failedTests", json.Number("0"))) && !truthy(summary["testFailures"]) {
+	if summary.FailedTests != nil && *summary.FailedTests != 0 && len(summary.TestFailures) == 0 {
 		lines = append(lines, "- 失败原因：xcresult 摘要未提供；见 tests.xcresult 和 simulator-test.log。")
 	}
 	return lines
 }
 
-func skippedCaseReason(root string, testCase map[string]any) string {
-	for _, child := range objects(testCase["children"]) {
-		if kind := child["nodeType"]; kind == "Failure Message" || kind == "Source Code Reference" {
-			return clean(pyStr(get(child, "name", "")))
+func skippedCaseReason(root string, testCase testNode) string {
+	for _, child := range testCase.Children {
+		if child.NodeType == "Failure Message" || child.NodeType == "Source Code Reference" {
+			return clean(orElse("", child.Name))
 		}
 	}
-	return skipReason(filepath.Join(root, "build/simulator-test.log"), pyStr(get(testCase, "name", "")))
+	return skipReason(filepath.Join(root, "build/simulator-test.log"), orElse("", testCase.Name))
 }
 
-func skippedLines(root string, summary map[string]any, cases []map[string]any) []string {
+func skippedLines(root string, summary testSummary, cases []testNode) []string {
 	var lines []string
 	for _, testCase := range cases {
-		if testCase["result"] != "Skipped" {
+		if testCase.Result != "Skipped" {
 			continue
 		}
-		name := get(testCase, "nodeIdentifier", get(testCase, "name", "?"))
-		lines = append(lines, fmt.Sprintf("- 跳过 %s：%s", clean(pyStr(name)), skippedCaseReason(root, testCase)))
+		name := orElse("?", testCase.Identifier, testCase.Name)
+		lines = append(lines, fmt.Sprintf("- 跳过 %s：%s", clean(name), skippedCaseReason(root, testCase)))
 	}
-	if truthy(get(summary, "skippedTests", json.Number("0"))) && len(lines) == 0 {
+	if summary.SkippedTests != nil && *summary.SkippedTests != 0 && len(lines) == 0 {
 		lines = append(lines, "- 跳过原因：xcresult 测试树未提供条目；见 tests.xcresult 和 simulator-test.log。")
 	}
 	return lines
 }
 
 func simulatorLines(root string) []string {
-	summary, _ := loadJSON(filepath.Join(root, "build/test-summary.json")).(map[string]any)
-	if len(summary) == 0 {
+	var summary testSummary
+	if !loadJSON(filepath.Join(root, "build/test-summary.json"), &summary) || reflect.ValueOf(summary).IsZero() {
 		return []string{"模拟器 XCTest：无可解析的 xcresult 摘要；见 simulator-test.log 与 tests.xcresult。"}
 	}
-	cases := testCases(loadJSON(filepath.Join(root, "build/test-cases.json")))
+	cases := testCases(filepath.Join(root, "build/test-cases.json"))
 	counts := fmt.Sprintf("模拟器 XCTest：通过 %s、失败 %s、跳过 %s；结果 %s。",
-		pyStr(get(summary, "passedTests", "?")), pyStr(get(summary, "failedTests", "?")),
-		pyStr(get(summary, "skippedTests", "?")), pyStr(get(summary, "result", "?")))
+		orElse("?", summary.PassedTests), orElse("?", summary.FailedTests),
+		orElse("?", summary.SkippedTests), orElse("?", summary.Result))
 	lines := append(destinationLines(summary), counts)
 	lines = append(lines, failureLines(summary)...)
 	return append(lines, skippedLines(root, summary, cases)...)

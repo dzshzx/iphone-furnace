@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"howett.net/plist"
 )
 
 const infoPlistXML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -139,12 +141,11 @@ func TestReadsBinaryInfoPlist(t *testing.T) {
 		t.Fatalf("got %q", message)
 	}
 	data, _ := hex.DecodeString(infoPlistBinary)
-	info, err := parsePlist(data)
-	if err != nil {
+	var extra map[string]any
+	if _, err := plist.Unmarshal(data, &extra); err != nil {
 		t.Fatal(err)
 	}
-	extra := info.(map[string]any)
-	if extra["Name"] != "炉" || !reflect.DeepEqual(extra["UIDeviceFamily"], []any{int64(1)}) {
+	if extra["Name"] != "炉" || !reflect.DeepEqual(extra["UIDeviceFamily"], []any{uint64(1)}) {
 		t.Fatalf("got %v", extra)
 	}
 }
