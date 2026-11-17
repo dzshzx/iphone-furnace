@@ -13,7 +13,7 @@ dependencies = [
 dev = ["pytest==9.2.0"]
 
 
-# ruff format 使用默认风格；版本固定在 scripts/format.sh。
+# ruff format 使用默认风格；版本固定在 scripts/gatelib.sh。
 [tool.ruff.lint]
 # EXE001、EXE002（shebang 与可执行位是否一致）ruff 在 WSL 上不执行，在别的 Linux 上才执行；
 # 关掉后本机门禁与 GitHub 托管机上的结果相同。
