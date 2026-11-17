@@ -70,7 +70,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
-    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -80,10 +79,7 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = "==9.2.0" },
-    { name = "pyyaml", specifier = "==6.0.3" },
-]
+dev = [{ name = "pytest", specifier = "==9.2.0" }]
 
 [[package]]
 name = "iniconfig"
