@@ -7,15 +7,15 @@
 # shellcheck disable=SC2034 # 常量由读入本文件的脚本使用
 
 # 工具版本，各仓只在这里写一次。
-PRETTIER_VERSION=3.9.10
+PRETTIER_VERSION=3.10.1
 SHFMT_VERSION=3.14.1
 # PyPI 包 shfmt-py 分发 shfmt，该版本内置上面的 shfmt。
 SHFMT_PY_VERSION=4.2.0
 SHELLCHECK_VERSION=0.11.0
 # PyPI 包 shellcheck-py 分发 shellcheck，该版本内置上面的 shellcheck。
 SHELLCHECK_PY_VERSION=0.11.0.1
-RUFF_VERSION=0.17.3
-COMPLEXIPY_VERSION=8.3.0
+RUFF_VERSION=0.17.5
+COMPLEXIPY_VERSION=9.0.0
 LIZARD_VERSION=1.26.0
 SWIFTLINT_VERSION=0.65.1
 # 该版本 GitHub Release 资产 swiftlint_linux_amd64.zip 的 SHA-256。
