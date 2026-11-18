@@ -1,11 +1,10 @@
 [project]
 name = "furnace-build-tools"
 version = "0.1.0"
-# 留在 3.14：coremltools 各版本（含 9.1.dev1）都还没有 cp315 轮子；有了再随登录环境升到 3.15。
+# coremltools 定了 Python 线与版本：正式版 9.0 没有 cp314 轮子（上游 apple/coremltools#2646），预发布 9.1.dev1 有；
+# 还没有任何版本有 cp315 轮子。正式版 9.1 发布后换回正式版，有 cp315 轮子后随登录环境升到 3.15。
 requires-python = ">=3.14,<3.15"
 dependencies = [
-    # 预发布版：coremltools 正式版 9.0 没有 Python 3.14 轮子（上游 apple/coremltools#2646），
-    # 9.1.dev1 有；正式版 9.1 发布后换回正式版。
     "coremltools==9.1.dev1",
     "numpy==2.5.4",
 ]
