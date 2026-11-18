@@ -1,5 +1,4 @@
 # prettier 只经 scripts/format.sh 处理；以下文件字节须保持不变，与 scripts/format.conf 的 EXCLUDE 同步。
-dist/
 uv.lock
 *.xcassets/
 THIRD_PARTY_NOTICES.md
